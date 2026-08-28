@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DocuScan Pro - Multi-Page Scanner</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- jsPDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: { 400: '#34d399', 500: '#10b981', 600: '#059669', 700: '#047857' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .canvas-container { touch-action: none; user-select: none; }
+    #magnifier {
+      pointer-events: none;
+      position: absolute;
+      width: 130px;
+      height: 130px;
+      border-radius: 50%;
+      border: 3px solid #10b981;
+      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.7), 0 0 20px rgba(16,185,129,0.4);
+      background-repeat: no-repeat;
+      display: none;
+      z-index: 50;
+    }
+    #magnifier::after {
+      content: '';
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 8px; height: 8px;
+      background: #10b981;
+      border-radius: 50%;
+      box-shadow: 0 0 0 2px white;
+    }
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: #090d16; }
+    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 flex flex-col h-screen overflow-hidden font-sans">
+
+  <!-- NAVBAR -->
+  <header class="h-16 border-b border-slate-800 bg-slate-900/90 backdrop-blur px-4 flex items-center justify-between shrink-0 z-20">
+    <div class="flex items-center space-x-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-emerald-400 flex items-center justify-center shadow-lg shadow-brand-500/20">
+        <i data-lucide="layers" class="w-6 h-6 text-white"></i>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="font-bold text-lg leading-none tracking-tight">DocuScan <span class="text-brand-500">Multi</span></h1>
+          <span id="pageCountBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-brand-500/10 border border-brand-500/30 text-brand-400 font-medium">0 Halaman</span>
+        </div>
+        <p class="text-xs text-slate-400 mt-0.5">Batch Document Scanner</p>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="flex items-center space-x-2">
+      <label for="imageUpload" class="cursor-pointer px-3.5 py-2 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs sm:text-sm font-medium rounded-lg flex items-center gap-1.5 transition border border-slate-700">
+        <i data-lucide="plus-circle" class="w-4 h-4 text-brand-400"></i>
+        <span>Tambah Halaman</span>
+      </label>
+      <input type="file" id="imageUpload" accept="image/*" multiple class="hidden">
+
+      <button id="btnExportPDF" disabled class="px-4 py-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:hover:bg-brand-600 text-white text-xs sm:text-sm font-medium rounded-lg flex items-center gap-2 shadow-lg shadow-brand-600/20 transition active:scale-95">
+        <i data-lucide="file-down" class="w-4 h-4"></i>
+        <span id="pdfBtnLabel">Export PDF</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <div class="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
+
+    <!-- UPLOAD DROPZONE (STATE AWAL) -->
+    <div id="dropZone" class="absolute inset-0 z-30 bg-slate-950 flex flex-col items-center justify-center p-6 text-center">
+      <div class="max-w-md w-full p-8 rounded-2xl border-2 border-dashed border-slate-700 hover:border-brand-500/70 bg-slate-900/40 hover:bg-slate-900/80 transition-all flex flex-col items-center group cursor-pointer" onclick="document.getElementById('imageUpload').click()">
+        <div class="w-20 h-20 rounded-full bg-slate-800 group-hover:bg-brand-500/10 flex items-center justify-center mb-4 transition text-slate-400 group-hover:text-brand-500">
+          <i data-lucide="files" class="w-10 h-10"></i>
+        </div>
+        <h3 class="text-lg font-semibold text-slate-200 mb-1">Unggah Beberapa Gambar Dokumen</h3>
+        <p class="text-sm text-slate-400 mb-6">Pilih 1 atau banyak foto sekaligus untuk dipindai menjadi berkas PDF.</p>
+        <button class="px-6 py-3 bg-brand-600 hover:bg-brand-500 text-white font-medium rounded-xl shadow-lg shadow-brand-600/30 flex items-center gap-2 transition">
+          <i data-lucide="upload-cloud" class="w-5 h-5"></i>
+          <span>Pilih File (Bisa Banyak)</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- LEFT SIDEBAR: THUMBNAILS LIST -->
+    <aside id="pageSidebar" class="w-full lg:w-48 border-b lg:border-b-0 lg:border-r border-slate-800 bg-slate-900/70 backdrop-blur p-3 flex lg:flex-col gap-3 overflow-x-auto lg:overflow-y-auto shrink-0 hidden">
+      <div class="hidden lg:flex items-center justify-between px-1 mb-1">
+        <span class="text-xs font-semibold uppercase text-slate-400">Daftar Berkas</span>
+        <label for="imageUpload" class="text-brand-400 hover:underline text-xs cursor-pointer flex items-center gap-0.5">
+          <i data-lucide="plus" class="w-3 h-3"></i> Tambah
+        </label>
+      </div>
+      <!-- Thumbnail List Container -->
+      <div id="thumbList" class="flex lg:flex-col gap-2.5 w-full"></div>
+    </aside>
+
+    <!-- CENTER: CANVAS VIEWPORT -->
+    <main class="flex-1 bg-slate-950 p-4 flex items-center justify-center relative overflow-hidden">
+      <div id="magnifier"></div>
+
+      <!-- Crop Stage -->
+      <div id="cropStage" class="relative w-full h-full flex items-center justify-center hidden">
+        <div class="relative max-w-full max-h-full canvas-container shadow-2xl rounded-lg overflow-hidden border border-slate-800">
+          <canvas id="cropCanvas" class="max-w-full max-h-[75vh] object-contain block"></canvas>
+        </div>
+      </div>
+
+      <!-- Result Stage -->
+      <div id="previewStage" class="relative w-full h-full flex items-center justify-center hidden">
+        <div class="relative max-w-full max-h-full shadow-2xl rounded-lg overflow-hidden border border-slate-800 bg-white">
+          <canvas id="resultCanvas" class="max-w-full max-h-[75vh] object-contain block"></canvas>
+        </div>
+      </div>
+    </main>
+
+    <!-- RIGHT CONTROL PANEL -->
+    <aside id="controlPanel" class="w-full lg:w-80 border-t lg:border-t-0 lg:border-l border-slate-800 bg-slate-900/90 backdrop-blur p-4 flex flex-col justify-between shrink-0 overflow-y-auto hidden">
+      
+      <!-- CROP CONTROLS -->
+      <div id="cropControls" class="space-y-4">
+        <div>
+          <div class="flex items-center justify-between">
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400" id="currentEditingPageTitle">Halaman 1</h2>
+            <button onclick="deleteCurrentPage()" class="text-rose-400 hover:text-rose-300 text-xs flex items-center gap-1">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Hapus
+            </button>
+          </div>
+          <p class="text-xs text-slate-500 mt-1">4 Sudut otomatis mengunci kertas. Geser sudut jika butuh penyesuaian.</p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <button id="btnAutoDetect" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-medium rounded-lg flex items-center justify-center gap-1.5 border border-slate-700 transition active:scale-95">
+            <i data-lucide="sparkles" class="w-3.5 h-3.5 text-brand-400"></i>
+            <span>Snap Garis AI</span>
+          </button>
+          <button id="btnFullArea" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-medium rounded-lg flex items-center justify-center gap-1.5 border border-slate-700 transition active:scale-95">
+            <i data-lucide="maximize" class="w-3.5 h-3.5 text-slate-400"></i>
+            <span>Full Area</span>
+          </button>
+        </div>
+
+        <!-- D-PAD MICRO ADJUSTMENT -->
+        <div class="p-3 bg-slate-950/70 border border-slate-800 rounded-xl space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-slate-300">Fine-Tuning Sudut</span>
+            <span id="activeCornerLabel" class="text-[10px] text-brand-400 font-mono bg-brand-500/10 px-1.5 py-0.5 rounded">Pojok Kiri Atas</span>
+          </div>
+          
+          <div class="grid grid-cols-3 gap-1.5 w-32 mx-auto pt-1">
+            <div></div>
+            <button onclick="nudgeActiveCorner(0, -2)" class="p-2 bg-slate-800 hover:bg-slate-700 active:bg-brand-600 rounded-lg flex items-center justify-center border border-slate-700 text-slate-300 transition shadow">
+              <i data-lucide="chevron-up" class="w-4 h-4"></i>
+            </button>
+            <div></div>
+            
+            <button onclick="nudgeActiveCorner(-2, 0)" class="p-2 bg-slate-800 hover:bg-slate-700 active:bg-brand-600 rounded-lg flex items-center justify-center border border-slate-700 text-slate-300 transition shadow">
+              <i data-lucide="chevron-left" class="w-4 h-4"></i>
+            </button>
+            <button onclick="detectDocumentCornersUltra(pages[currentPageIndex])" title="Reset Garis" class="p-2 bg-brand-600/30 hover:bg-brand-600/50 rounded-lg flex items-center justify-center border border-brand-500/50 text-brand-400 transition shadow">
+              <i data-lucide="crosshair" class="w-4 h-4"></i>
+            </button>
+            <button onclick="nudgeActiveCorner(2, 0)" class="p-2 bg-slate-800 hover:bg-slate-700 active:bg-brand-600 rounded-lg flex items-center justify-center border border-slate-700 text-slate-300 transition shadow">
+              <i data-lucide="chevron-right" class="w-4 h-4"></i>
+            </button>
+
+            <div></div>
+            <button onclick="nudgeActiveCorner(0, 2)" class="p-2 bg-slate-800 hover:bg-slate-700 active:bg-brand-600 rounded-lg flex items-center justify-center border border-slate-700 text-slate-300 transition shadow">
+              <i data-lucide="chevron-down" class="w-4 h-4"></i>
+            </button>
+            <div></div>
+          </div>
+        </div>
+
+        <div class="pt-2 border-t border-slate-800 flex flex-col gap-2">
+          <button id="btnApplyWarp" class="w-full py-3 bg-brand-600 hover:bg-brand-500 text-white font-medium rounded-xl shadow-lg shadow-brand-500/25 flex items-center justify-center gap-2 transition active:scale-98">
+            <i data-lucide="check" class="w-5 h-5"></i>
+            <span>Luruskan Halaman Ini</span>
+          </button>
+          <button onclick="warpAllPages()" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg flex items-center justify-center gap-1.5 border border-slate-700">
+            <i data-lucide="check-check" class="w-4 h-4 text-brand-400"></i>
+            <span>Luruskan Semua Halaman</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- FILTER CONTROLS -->
+      <div id="filterControls" class="space-y-4 hidden">
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Filter Dokumen</h2>
+            <button id="btnBackToCrop" class="text-xs text-brand-400 hover:underline flex items-center gap-1">
+              <i data-lucide="crop" class="w-3.5 h-3.5"></i> Edit Sudut
+            </button>
+          </div>
+          
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="applyFilterToCurrent('magic')" class="filter-btn p-3 bg-slate-800/80 hover:bg-slate-700 border border-brand-500 rounded-xl text-left transition flex flex-col gap-1.5" data-filter="magic">
+              <i data-lucide="wand-2" class="w-4 h-4 text-brand-400"></i>
+              <span class="text-xs font-medium text-slate-200">Magic Color</span>
+            </button>
+            <button onclick="applyFilterToCurrent('bw')" class="filter-btn p-3 bg-slate-800/80 hover:bg-slate-700 border border-slate-700 rounded-xl text-left transition flex flex-col gap-1.5" data-filter="bw">
+              <i data-lucide="contrast" class="w-4 h-4 text-slate-300"></i>
+              <span class="text-xs font-medium text-slate-200">B&W Doc</span>
+            </button>
+            <button onclick="applyFilterToCurrent('gray')" class="filter-btn p-3 bg-slate-800/80 hover:bg-slate-700 border border-slate-700 rounded-xl text-left transition flex flex-col gap-1.5" data-filter="gray">
+              <i data-lucide="sun-medium" class="w-4 h-4 text-slate-300"></i>
+              <span class="text-xs font-medium text-slate-200">Grayscale</span>
+            </button>
+            <button onclick="applyFilterToCurrent('original')" class="filter-btn p-3 bg-slate-800/80 hover:bg-slate-700 border border-slate-700 rounded-xl text-left transition flex flex-col gap-1.5" data-filter="original">
+              <i data-lucide="image" class="w-4 h-4 text-slate-300"></i>
+              <span class="text-xs font-medium text-slate-200">Asli</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Rotate -->
+        <div class="pt-3 border-t border-slate-800">
+          <label class="text-xs text-slate-400 font-medium mb-2 block">Rotasi</label>
+          <div class="flex gap-2">
+            <button onclick="rotateCurrent(-90)" class="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-medium rounded-lg flex items-center justify-center gap-1.5 border border-slate-700">
+              <i data-lucide="rotate-ccw" class="w-4 h-4"></i> Kiri
+            </button>
+            <button onclick="rotateCurrent(90)" class="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-medium rounded-lg flex items-center justify-center gap-1.5 border border-slate-700">
+              <i data-lucide="rotate-cw" class="w-4 h-4"></i> Kanan
+            </button>
+          </div>
+        </div>
+
+        <div class="pt-3 border-t border-slate-800 flex gap-2">
+          <button onclick="applyFilterToAll()" class="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg border border-slate-700">
+            Terapkan Filter ke Semua
+          </button>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    lucide.createIcons();
+
+    // DOM References
+    const dropZone = document.getElementById('dropZone');
+    const imageUpload = document.getElementById('imageUpload');
+    const pageSidebar = document.getElementById('pageSidebar');
+    const thumbList = document.getElementById('thumbList');
+    const cropStage = document.getElementById('cropStage');
+    const previewStage = document.getElementById('previewStage');
+    const controlPanel = document.getElementById('controlPanel');
+    const cropControls = document.getElementById('cropControls');
+    const filterControls = document.getElementById('filterControls');
+    const magnifier = document.getElementById('magnifier');
+    const pageCountBadge = document.getElementById('pageCountBadge');
+    const pdfBtnLabel = document.getElementById('pdfBtnLabel');
+    const activeCornerLabel = document.getElementById('activeCornerLabel');
+    const currentEditingPageTitle = document.getElementById('currentEditingPageTitle');
+
+    const btnAutoDetect = document.getElementById('btnAutoDetect');
+    const btnFullArea = document.getElementById('btnFullArea');
+    const btnApplyWarp = document.getElementById('btnApplyWarp');
+    const btnBackToCrop = document.getElementById('btnBackToCrop');
+    const btnExportPDF = document.getElementById('btnExportPDF');
+
+    const cropCanvas = document.getElementById('cropCanvas');
+    const cropCtx = cropCanvas.getContext('2d');
+    const resultCanvas = document.getElementById('resultCanvas');
+    const resultCtx = resultCanvas.getContext('2d');
+
+    // Multi-Page State
+    let pages = []; 
+    // Format page: { id, file, rawImage, corners, selectedCornerIndex, filter, rotation, isWarped, warpedCanvas }
+    let currentPageIndex = 0;
+    let activePointIndex = -1;
+    const cornerNames = ["Pojok Kiri Atas", "Pojok Kanan Atas", "Pojok Kanan Bawah", "Pojok Kiri Bawah"];
+
+    // 1. MULTI-FILE UPLOAD & HANDLING
+    imageUpload.addEventListener('change', (e) => {
+      if (e.target.files.length) handleMultipleFiles(Array.from(e.target.files));
+    });
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(ev => {
+      dropZone.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); });
+    });
+    dropZone.addEventListener('drop', (e) => {
+      if (e.dataTransfer.files.length) handleMultipleFiles(Array.from(e.dataTransfer.files));
+    });
+
+    function handleMultipleFiles(files) {
+      const validFiles = files.filter(f => f.type.startsWith('image/'));
+      if (!validFiles.length) return;
+
+      let loadedCount = 0;
+      validFiles.forEach((file) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            const pageObj = {
+              id: Date.now() + Math.random(),
+              file: file,
+              rawImage: img,
+              corners: [],
+              selectedCornerIndex: 0,
+              filter: 'magic',
+              rotation: 0,
+              isWarped: false,
+              warpedCanvas: document.createElement('canvas')
+            };
+
+            // Hitung sudut otomatis
+            detectDocumentCornersUltra(pageObj);
+
+            pages.push(pageObj);
+            loadedCount++;
+
+            if (loadedCount === validFiles.length) {
+              dropZone.classList.add('hidden');
+              pageSidebar.classList.remove('hidden');
+              controlPanel.classList.remove('hidden');
+              btnExportPDF.disabled = false;
+              
+              selectPage(pages.length - validFiles.length); // pilih page pertama dari batch baru
+              renderThumbnails();
+              updatePageCount();
+            }
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+      imageUpload.value = '';
+    }
+
+    function updatePageCount() {
+      pageCountBadge.innerText = `${pages.length} Halaman`;
+      pdfBtnLabel.innerText = `Export PDF (${pages.length})`;
+    }
+
+    // 2. ULTRA PRECISION LINE-INTERSECTION ALGORITHM
+    function detectDocumentCornersUltra(pageObj) {
+      const img = pageObj.rawImage;
+      const W = img.width;
+      const H = img.height;
+
+      const sw = 240;
+      const sh = Math.round((H / W) * 240);
+      const scaleX = W / sw;
+      const scaleY = H / sh;
+
+      const tCanvas = document.createElement('canvas');
+      tCanvas.width = sw;
+      tCanvas.height = sh;
+      const tCtx = tCanvas.getContext('2d');
+      tCtx.drawImage(img, 0, 0, sw, sh);
+
+      const imgData = tCtx.getImageData(0, 0, sw, sh);
+      const data = imgData.data;
+
+      const gray = new Uint8Array(sw * sh);
+      const hist = new Int32Array(256);
+
+      for (let i = 0; i < data.length; i += 4) {
+        const lum = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+        gray[i / 4] = lum;
+        hist[lum]++;
+      }
+
+      let total = sw * sh;
+      let sum = 0;
+      for (let i = 0; i < 256; i++) sum += i * hist[i];
+
+      let sumB = 0, wB = 0, wF = 0, varMax = 0, threshold = 120;
+      for (let t = 0; t < 256; t++) {
+        wB += hist[t];
+        if (wB === 0) continue;
+        wF = total - wB;
+        if (wF === 0) break;
+        sumB += t * hist[t];
+        let mB = sumB / wB;
+        let mF = (sum - sumB) / wF;
+        let varBetween = wB * wF * (mB - mF) * (mB - mF);
+        if (varBetween > varMax) {
+          varMax = varBetween;
+          threshold = t;
+        }
+      }
+      threshold = Math.max(100, threshold);
+
+      const mask = new Uint8Array(sw * sh);
+      let count = 0;
+      for (let y = 1; y < sh - 1; y++) {
+        for (let x = 1; x < sw - 1; x++) {
+          const idx = y * sw + x;
+          if (gray[idx] >= threshold) {
+            mask[idx] = 1;
+            count++;
+          }
+        }
+      }
+
+      if (count < (sw * sh) * 0.1) {
+        pageObj.corners = [
+          { x: W * 0.06, y: H * 0.06 },
+          { x: W * 0.94, y: H * 0.06 },
+          { x: W * 0.94, y: H * 0.94 },
+          { x: W * 0.06, y: H * 0.94 }
+        ];
+        return;
+      }
+
+      const topPts = [], botPts = [], leftPts = [], rightPts = [];
+      for (let x = 10; x < sw - 10; x += 2) {
+        for (let y = 5; y < sh - 5; y++) {
+          if (mask[y * sw + x] === 1) { topPts.push({ x, y }); break; }
+        }
+        for (let y = sh - 6; y >= 5; y--) {
+          if (mask[y * sw + x] === 1) { botPts.push({ x, y }); break; }
+        }
+      }
+      for (let y = 10; y < sh - 10; y += 2) {
+        for (let x = 5; x < sw - 5; x++) {
+          if (mask[y * sw + x] === 1) { leftPts.push({ x, y }); break; }
+        }
+        for (let x = sw - 6; x >= 5; x--) {
+          if (mask[y * sw + x] === 1) { rightPts.push({ x, y }); break; }
+        }
+      }
+
+      const lineTop = fitLineY(topPts);
+      const lineBot = fitLineY(botPts);
+      const lineLeft = fitLineX(leftPts);
+      const lineRight = fitLineX(rightPts);
+
+      const ptTL = intersect(lineTop, lineLeft);
+      const ptTR = intersect(lineTop, lineRight);
+      const ptBR = intersect(lineBot, lineRight);
+      const ptBL = intersect(lineBot, lineLeft);
+
+      pageObj.corners = [
+        { x: Math.max(0, Math.min(W, ptTL.x * scaleX)), y: Math.max(0, Math.min(H, ptTL.y * scaleY)) },
+        { x: Math.max(0, Math.min(W, ptTR.x * scaleX)), y: Math.max(0, Math.min(H, ptTR.y * scaleY)) },
+        { x: Math.max(0, Math.min(W, ptBR.x * scaleX)), y: Math.max(0, Math.min(H, ptBR.y * scaleY)) },
+        { x: Math.max(0, Math.min(W, ptBL.x * scaleX)), y: Math.max(0, Math.min(H, ptBL.y * scaleY)) }
+      ];
+    }
+
+    function fitLineY(pts) {
+      if (pts.length < 2) return { m: 0, c: 0 };
+      let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0, n = pts.length;
+      for (let p of pts) {
+        sumX += p.x; sumY += p.y;
+        sumXY += p.x * p.y; sumX2 += p.x * p.x;
+      }
+      const m = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX || 1);
+      const c = (sumY - m * sumX) / n;
+      return { m, c };
+    }
+
+    function fitLineX(pts) {
+      if (pts.length < 2) return { m: 0, c: 0 };
+      let sumX = 0, sumY = 0, sumXY = 0, sumY2 = 0, n = pts.length;
+      for (let p of pts) {
+        sumX += p.x; sumY += p.y;
+        sumXY += p.x * p.y; sumY2 += p.y * p.y;
+      }
+      const m = (n * sumXY - sumX * sumY) / (n * sumY2 - sumY * sumY || 1);
+      const c = (sumX - m * sumY) / n;
+      return { m, c };
+    }
+
+    function intersect(lineH, lineV) {
+      const y = (lineH.m * lineV.c + lineH.c) / (1 - lineH.m * lineV.m || 1);
+      const x = lineV.m * y + lineV.c;
+      return { x, y };
+    }
+
+    // 3. PAGE SELECTION & RENDERING
+    function selectPage(idx) {
+      if (idx < 0 || idx >= pages.length) return;
+      currentPageIndex = idx;
+      const curPage = pages[currentPageIndex];
+
+      currentEditingPageTitle.innerText = `Halaman ${currentPageIndex + 1}`;
+      activeCornerLabel.innerText = cornerNames[curPage.selectedCornerIndex];
+
+      if (curPage.isWarped) {
+        cropStage.classList.add('hidden');
+        previewStage.classList.remove('hidden');
+        cropControls.classList.add('hidden');
+        filterControls.classList.remove('hidden');
+        renderFinalPageResult(curPage);
+      } else {
+        cropStage.classList.remove('hidden');
+        previewStage.classList.add('hidden');
+        cropControls.classList.remove('hidden');
+        filterControls.classList.add('hidden');
+
+        cropCanvas.width = curPage.rawImage.width;
+        cropCanvas.height = curPage.rawImage.height;
+        renderCropOverlay();
+        attachCanvasEvents();
+      }
+
+      renderThumbnails();
+    }
+
+    function renderThumbnails() {
+      thumbList.innerHTML = '';
+      pages.forEach((p, i) => {
+        const isActive = (i === currentPageIndex);
+        const card = document.createElement('div');
+        card.className = `cursor-pointer p-1.5 rounded-xl border transition flex flex-col items-center gap-1 shrink-0 ${
+          isActive ? 'border-brand-500 bg-brand-500/10' : 'border-slate-800 bg-slate-900/60 hover:border-slate-700'
+        }`;
+        card.onclick = () => selectPage(i);
+
+        // Thumbnail Canvas
+        const thumbCanvas = document.createElement('canvas');
+        thumbCanvas.width = 80;
+        thumbCanvas.height = 100;
+        thumbCanvas.className = "w-16 h-20 sm:w-20 sm:h-24 object-contain rounded bg-slate-950";
+        const tCtx = thumbCanvas.getContext('2d');
+        
+        if (p.isWarped && p.warpedCanvas.width) {
+          tCtx.drawImage(p.warpedCanvas, 0, 0, thumbCanvas.width, thumbCanvas.height);
+        } else {
+          tCtx.drawImage(p.rawImage, 0, 0, thumbCanvas.width, thumbCanvas.height);
+        }
+
+        const label = document.createElement('span');
+        label.className = `text-[11px] font-medium ${isActive ? 'text-brand-400 font-bold' : 'text-slate-400'}`;
+        label.innerText = `Hal ${i + 1}`;
+
+        card.appendChild(thumbCanvas);
+        card.appendChild(label);
+        thumbList.appendChild(card);
+      });
+      lucide.createIcons();
+    }
+
+    function deleteCurrentPage() {
+      if (!pages.length) return;
+      pages.splice(currentPageIndex, 1);
+      if (pages.length === 0) {
+        dropZone.classList.remove('hidden');
+        pageSidebar.classList.add('hidden');
+        controlPanel.classList.add('hidden');
+        cropStage.classList.add('hidden');
+        previewStage.classList.add('hidden');
+        btnExportPDF.disabled = true;
+      } else {
+        currentPageIndex = Math.max(0, currentPageIndex - 1);
+        selectPage(currentPageIndex);
+      }
+      updatePageCount();
+    }
+
+    // 4. OVERLAY & INTERACTIONS
+    function renderCropOverlay() {
+      const curPage = pages[currentPageIndex];
+      if (!curPage) return;
+
+      cropCtx.clearRect(0, 0, cropCanvas.width, cropCanvas.height);
+      cropCtx.drawImage(curPage.rawImage, 0, 0);
+
+      cropCtx.fillStyle = "rgba(15, 23, 42, 0.6)";
+      cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
+
+      cropCtx.save();
+      cropCtx.beginPath();
+      cropCtx.moveTo(curPage.corners[0].x, curPage.corners[0].y);
+      for (let i = 1; i < 4; i++) cropCtx.lineTo(curPage.corners[i].x, curPage.corners[i].y);
+      cropCtx.closePath();
+      cropCtx.clip();
+      cropCtx.drawImage(curPage.rawImage, 0, 0);
+      cropCtx.restore();
+
+      cropCtx.strokeStyle = "#10b981";
+      cropCtx.lineWidth = Math.max(3, cropCanvas.width * 0.0035);
+      cropCtx.beginPath();
+      cropCtx.moveTo(curPage.corners[0].x, curPage.corners[0].y);
+      for (let i = 1; i < 4; i++) cropCtx.lineTo(curPage.corners[i].x, curPage.corners[i].y);
+      cropCtx.closePath();
+      cropCtx.stroke();
+
+      const radius = Math.max(14, cropCanvas.width * 0.018);
+      curPage.corners.forEach((p, idx) => {
+        const isSelected = (idx === curPage.selectedCornerIndex);
+        cropCtx.beginPath();
+        cropCtx.arc(p.x, p.y, isSelected ? radius * 1.25 : radius, 0, 2 * Math.PI);
+        cropCtx.fillStyle = isSelected ? "#34d399" : "#ffffff";
+        cropCtx.fill();
+        cropCtx.lineWidth = 3.5;
+        cropCtx.strokeStyle = isSelected ? "#ffffff" : "#059669";
+        cropCtx.stroke();
+
+        cropCtx.beginPath();
+        cropCtx.arc(p.x, p.y, radius * 0.35, 0, 2 * Math.PI);
+        cropCtx.fillStyle = isSelected ? "#064e3b" : "#10b981";
+        cropCtx.fill();
+      });
+    }
+
+    function selectCorner(idx) {
+      const curPage = pages[currentPageIndex];
+      curPage.selectedCornerIndex = idx;
+      activeCornerLabel.innerText = cornerNames[idx];
+      renderCropOverlay();
+    }
+
+    window.nudgeActiveCorner = function(dx, dy) {
+      const curPage = pages[currentPageIndex];
+      if (!curPage) return;
+      const idx = curPage.selectedCornerIndex;
+      curPage.corners[idx].x = Math.max(0, Math.min(cropCanvas.width, curPage.corners[idx].x + dx));
+      curPage.corners[idx].y = Math.max(0, Math.min(cropCanvas.height, curPage.corners[idx].y + dy));
+      renderCropOverlay();
+    };
+
+    btnAutoDetect.addEventListener('click', () => {
+      detectDocumentCornersUltra(pages[currentPageIndex]);
+      renderCropOverlay();
+    });
+
+    btnFullArea.addEventListener('click', () => {
+      const curPage = pages[currentPageIndex];
+      curPage.corners = [
+        { x: 0, y: 0 },
+        { x: cropCanvas.width, y: 0 },
+        { x: cropCanvas.width, y: cropCanvas.height },
+        { x: 0, y: cropCanvas.height }
+      ];
+      renderCropOverlay();
+    });
+
+    function attachCanvasEvents() {
+      const getCoords = (e) => {
+        const rect = cropCanvas.getBoundingClientRect();
+        const scaleX = cropCanvas.width / rect.width;
+        const scaleY = cropCanvas.height / rect.height;
+        const cx = e.touches ? e.touches[0].clientX : e.clientX;
+        const cy = e.touches ? e.touches[0].clientY : e.clientY;
+        return { x: (cx - rect.left) * scaleX, y: (cy - rect.top) * scaleY, clientX: cx, clientY: cy };
+      };
+
+      const start = (e) => {
+        const pos = getCoords(e);
+        const curPage = pages[currentPageIndex];
+        const hitDist = Math.max(45, cropCanvas.width * 0.055);
+        activePointIndex = curPage.corners.findIndex(p => Math.hypot(p.x - pos.x, p.y - pos.y) < hitDist);
+        if (activePointIndex !== -1) {
+          selectCorner(activePointIndex);
+          updateLoupe(pos);
+        }
+      };
+
+      const move = (e) => {
+        if (activePointIndex === -1) return;
+        e.preventDefault();
+        const pos = getCoords(e);
+        const curPage = pages[currentPageIndex];
+        curPage.corners[activePointIndex].x = Math.min(Math.max(0, pos.x), cropCanvas.width);
+        curPage.corners[activePointIndex].y = Math.min(Math.max(0, pos.y), cropCanvas.height);
+        renderCropOverlay();
+        updateLoupe(pos);
+      };
+
+      const end = () => {
+        activePointIndex = -1;
+        magnifier.style.display = 'none';
+      };
+
+      function updateLoupe(pos) {
+        const curPage = pages[currentPageIndex];
+        magnifier.style.display = 'block';
+        magnifier.style.left = `${pos.clientX - 65}px`;
+        magnifier.style.top = `${pos.clientY - 145}px`;
+
+        const zoom = 2.5;
+        magnifier.style.backgroundImage = `url(${curPage.rawImage.src})`;
+        magnifier.style.backgroundSize = `${cropCanvas.width * (cropCanvas.clientWidth / cropCanvas.width) * zoom}px auto`;
+        
+        const activeCorner = curPage.corners[curPage.selectedCornerIndex];
+        const screenX = (activeCorner.x / cropCanvas.width) * cropCanvas.clientWidth;
+        const screenY = (activeCorner.y / cropCanvas.height) * cropCanvas.clientHeight;
+        magnifier.style.backgroundPosition = `-${screenX * zoom - 65}px -${screenY * zoom - 65}px`;
+      }
+
+      cropCanvas.onmousedown = start;
+      window.onmousemove = move;
+      window.onmouseup = end;
+
+      cropCanvas.ontouchstart = start;
+      window.ontouchmove = move;
+      window.ontouchend = end;
+    }
+
+    // 5. WARP PERSPECTIVE & FILTERS
+    btnApplyWarp.addEventListener('click', () => {
+      warpPage(pages[currentPageIndex]);
+      selectPage(currentPageIndex);
+    });
+
+    btnBackToCrop.addEventListener('click', () => {
+      pages[currentPageIndex].isWarped = false;
+      selectPage(currentPageIndex);
+    });
+
+    window.warpAllPages = function() {
+      pages.forEach(p => warpPage(p));
+      selectPage(currentPageIndex);
+    };
+
+    function warpPage(pageObj) {
+      const pts = pageObj.corners;
+      const widthTop = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+      const widthBottom = Math.hypot(pts[2].x - pts[3].x, pts[2].y - pts[3].y);
+      const heightLeft = Math.hypot(pts[3].x - pts[0].x, pts[3].y - pts[0].y);
+      const heightRight = Math.hypot(pts[2].x - pts[1].x, pts[2].y - pts[1].y);
+
+      const dstW = Math.round(Math.max(widthTop, widthBottom));
+      const dstH = Math.round(Math.max(heightLeft, heightRight));
+
+      pageObj.warpedCanvas.width = dstW;
+      pageObj.warpedCanvas.height = dstH;
+      const ctx = pageObj.warpedCanvas.getContext('2d');
+
+      const sCanvas = document.createElement('canvas');
+      sCanvas.width = pageObj.rawImage.width;
+      sCanvas.height = pageObj.rawImage.height;
+      const sCtx = sCanvas.getContext('2d');
+      sCtx.drawImage(pageObj.rawImage, 0, 0);
+
+      const srcData = sCtx.getImageData(0, 0, sCanvas.width, sCanvas.height).data;
+      const outImgData = ctx.createImageData(dstW, dstH);
+      const dstData = outImgData.data;
+
+      const p0 = pts[0], p1 = pts[1], p2 = pts[2], p3 = pts[3];
+      const srcW = sCanvas.width, srcH = sCanvas.height;
+
+      for (let y = 0; y < dstH; y++) {
+        const v = y / dstH;
+        for (let x = 0; x < dstW; x++) {
+          const u = x / dstW;
+          const sx = (1 - u) * (1 - v) * p0.x + u * (1 - v) * p1.x + u * v * p2.x + (1 - u) * v * p3.x;
+          const sy = (1 - u) * (1 - v) * p0.y + u * (1 - v) * p1.y + u * v * p2.y + (1 - u) * v * p3.y;
+
+          const isx = Math.floor(sx);
+          const isy = Math.floor(sy);
+
+          if (isx >= 0 && isx < srcW && isy >= 0 && isy < srcH) {
+            const srcIdx = (isy * srcW + isx) * 4;
+            const dstIdx = (y * dstW + x) * 4;
+            dstData[dstIdx]     = srcData[srcIdx];
+            dstData[dstIdx + 1] = srcData[srcIdx + 1];
+            dstData[dstIdx + 2] = srcData[srcIdx + 2];
+            dstData[dstIdx + 3] = 255;
+          }
+        }
+      }
+      ctx.putImageData(outImgData, 0, 0);
+      pageObj.isWarped = true;
+    }
+
+    function renderFinalPageResult(pageObj) {
+      // Highlight filter button
+      document.querySelectorAll('.filter-btn').forEach(b => {
+        if (b.dataset.filter === pageObj.filter) {
+          b.classList.add('border-brand-500');
+          b.classList.remove('border-slate-700');
+        } else {
+          b.classList.remove('border-brand-500');
+          b.classList.add('border-slate-700');
+        }
+      });
+
+      resultCanvas.width = pageObj.warpedCanvas.width;
+      resultCanvas.height = pageObj.warpedCanvas.height;
+      resultCtx.drawImage(pageObj.warpedCanvas, 0, 0);
+
+      const imgData = resultCtx.getImageData(0, 0, resultCanvas.width, resultCanvas.height);
+      const data = imgData.data;
+      const len = data.length;
+
+      if (pageObj.filter === 'magic') {
+        for (let i = 0; i < len; i += 4) {
+          let r = data[i], g = data[i + 1], b = data[i + 2];
+          r = ((r - 128) * 1.45) + 155;
+          g = ((g - 128) * 1.45) + 155;
+          b = ((b - 128) * 1.45) + 155;
+          data[i]     = Math.min(255, Math.max(0, r));
+          data[i + 1] = Math.min(255, Math.max(0, g));
+          data[i + 2] = Math.min(255, Math.max(0, b));
+        }
+      } else if (pageObj.filter === 'bw') {
+        for (let i = 0; i < len; i += 4) {
+          const avg = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+          const val = avg > 130 ? 255 : (avg < 75 ? 0 : (avg - 75) * 4.6);
+          data[i] = data[i + 1] = data[i + 2] = val;
+        }
+      } else if (pageObj.filter === 'gray') {
+        for (let i = 0; i < len; i += 4) {
+          const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+          data[i] = data[i + 1] = data[i + 2] = gray;
+        }
+      }
+      resultCtx.putImageData(imgData, 0, 0);
+    }
+
+    window.applyFilterToCurrent = function(type) {
+      pages[currentPageIndex].filter = type;
+      renderFinalPageResult(pages[currentPageIndex]);
+    };
+
+    window.applyFilterToAll = function() {
+      const type = pages[currentPageIndex].filter;
+      pages.forEach(p => { p.filter = type; });
+      renderFinalPageResult(pages[currentPageIndex]);
+    };
+
+    window.rotateCurrent = function(deg) {
+      const curPage = pages[currentPageIndex];
+      const temp = document.createElement('canvas');
+      temp.width = curPage.warpedCanvas.width;
+      temp.height = curPage.warpedCanvas.height;
+      temp.getContext('2d').drawImage(curPage.warpedCanvas, 0, 0);
+
+      curPage.warpedCanvas.width = temp.height;
+      curPage.warpedCanvas.height = temp.width;
+
+      const ctx = curPage.warpedCanvas.getContext('2d');
+      ctx.save();
+      ctx.translate(curPage.warpedCanvas.width / 2, curPage.warpedCanvas.height / 2);
+      ctx.rotate((deg * Math.PI) / 180);
+      ctx.drawImage(temp, -temp.width / 2, -temp.height / 2);
+      ctx.restore();
+
+      renderFinalPageResult(curPage);
+      renderThumbnails();
+    };
+
+    // 6. MULTI-PAGE PDF EXPORT
+    btnExportPDF.addEventListener('click', () => {
+      if (!pages.length) return;
+
+      const { jsPDF } = window.jspdf;
+      let pdf = null;
+
+      // Pastikan semua halaman sudah di-warp & di-filter
+      pages.forEach((page, index) => {
+        if (!page.isWarped) warpPage(page);
+
+        // Render buffer canvas
+        const bufferCanvas = document.createElement('canvas');
+        bufferCanvas.width = page.warpedCanvas.width;
+        bufferCanvas.height = page.warpedCanvas.height;
+        const bCtx = bufferCanvas.getContext('2d');
+        bCtx.drawImage(page.warpedCanvas, 0, 0);
+
+        // Terapkan filter ke buffer
+        const imgData = bCtx.getImageData(0, 0, bufferCanvas.width, bufferCanvas.height);
+        const data = imgData.data;
+        const len = data.length;
+
+        if (page.filter === 'magic') {
+          for (let i = 0; i < len; i += 4) {
+            data[i]     = Math.min(255, Math.max(0, ((data[i] - 128) * 1.45) + 155));
+            data[i + 1] = Math.min(255, Math.max(0, ((data[i + 1] - 128) * 1.45) + 155));
+            data[i + 2] = Math.min(255, Math.max(0, ((data[i + 2] - 128) * 1.45) + 155));
+          }
+        } else if (page.filter === 'bw') {
+          for (let i = 0; i < len; i += 4) {
+            const avg = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+            data[i] = data[i + 1] = data[i + 2] = avg > 130 ? 255 : (avg < 75 ? 0 : (avg - 75) * 4.6);
+          }
+        } else if (page.filter === 'gray') {
+          for (let i = 0; i < len; i += 4) {
+            const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+            data[i] = data[i + 1] = data[i + 2] = gray;
+          }
+        }
+        bCtx.putImageData(imgData, 0, 0);
+
+        const isLandscape = bufferCanvas.width > bufferCanvas.height;
+        const orientation = isLandscape ? 'l' : 'p';
+
+        if (index === 0) {
+          pdf = new jsPDF({
+            orientation: orientation,
+            unit: 'px',
+            format: [bufferCanvas.width, bufferCanvas.height]
+          });
+        } else {
+          pdf.addPage([bufferCanvas.width, bufferCanvas.height], orientation);
+        }
+
+        pdf.addImage(bufferCanvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, bufferCanvas.width, bufferCanvas.height);
+      });
+
+      pdf.save(`DocuScan_${pages.length}_Halaman_${Date.now()}.pdf`);
+    });
+  </script>
+</body>
+</html>
