@@ -24,7 +24,6 @@
     }
   </script>
   <style>
-    /* Prevent pull-to-refresh & rubber-banding on mobile */
     html, body {
       height: 100%;
       height: 100dvh;
@@ -35,7 +34,6 @@
       touch-action: none;
       user-select: none;
     }
-    /* Loupe Zoom */
     #magnifier {
       pointer-events: none;
       position: absolute;
@@ -58,12 +56,33 @@
       border-radius: 50%;
       box-shadow: 0 0 0 2px white;
     }
-    /* Hide scrollbars for clean UI */
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100 flex flex-col h-[100dvh] w-screen overflow-hidden font-sans select-none">
+
+  <!-- LOADING OVERLAY MODAL -->
+  <div id="loadingOverlay" class="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex flex-col items-center justify-center p-6 hidden">
+    <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl max-w-xs w-full shadow-2xl flex flex-col items-center text-center">
+      <!-- Spinner -->
+      <div class="relative w-12 h-12 mb-4">
+        <div class="w-12 h-12 rounded-full border-4 border-slate-800 border-t-brand-500 animate-spin"></div>
+        <div class="absolute inset-0 flex items-center justify-center text-brand-400">
+          <i data-lucide="cpu" class="w-5 h-5"></i>
+        </div>
+      </div>
+      
+      <h3 id="loadingTitle" class="text-sm font-semibold text-slate-100 mb-1">Memproses Dokumen</h3>
+      <p id="loadingSubtitle" class="text-xs text-slate-400 mb-4">Mohon tunggu sebentar...</p>
+      
+      <!-- Progress Bar -->
+      <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden mb-1.5">
+        <div id="loadingProgressBar" class="bg-gradient-to-r from-brand-600 to-emerald-400 h-full w-0 transition-all duration-200"></div>
+      </div>
+      <span id="loadingPercent" class="text-[10px] font-mono text-brand-400 font-bold">0%</span>
+    </div>
+  </div>
 
   <!-- TOP MOBILE HEADER -->
   <header class="h-14 bg-slate-900/90 backdrop-blur border-b border-slate-800 px-3 flex items-center justify-between shrink-0 z-30">
@@ -110,7 +129,7 @@
       </div>
     </div>
 
-    <!-- CENTER: CANVAS VIEWPORT (AUTO-FIT) -->
+    <!-- CENTER: CANVAS VIEWPORT -->
     <main class="flex-1 w-full relative flex items-center justify-center p-2 overflow-hidden bg-slate-950">
       <div id="magnifier"></div>
 
@@ -162,7 +181,7 @@
           </button>
         </div>
 
-        <!-- COLLAPSIBLE MICRO D-PAD (POPUP/DRAWER) -->
+        <!-- MICRO D-PAD -->
         <div id="dpadPanel" class="p-2.5 bg-slate-950 rounded-xl border border-slate-800 hidden flex items-center justify-between">
           <div class="text-[11px]">
             <span class="text-slate-400 block">Fine-Tuning:</span>
@@ -195,9 +214,8 @@
         </div>
       </div>
 
-      <!-- MODE B: FILTER & RESULT CONTROLS -->
+      <!-- MODE B: FILTER CONTROLS -->
       <div id="filterControls" class="space-y-2.5 hidden">
-        <!-- Horizontal Scroll Filters -->
         <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
           <button onclick="applyFilterToCurrent('magic')" class="filter-btn shrink-0 px-3 py-1.5 bg-slate-800 active:bg-slate-700 border border-brand-500 rounded-lg text-xs flex items-center gap-1.5" data-filter="magic">
             <i data-lucide="wand-2" class="w-3.5 h-3.5 text-brand-400"></i>
@@ -265,13 +283,41 @@
     const resultCanvas = document.getElementById('resultCanvas');
     const resultCtx = resultCanvas.getContext('2d');
 
+    // Loading Modal Elements
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    const loadingTitle = document.getElementById('loadingTitle');
+    const loadingSubtitle = document.getElementById('loadingSubtitle');
+    const loadingProgressBar = document.getElementById('loadingProgressBar');
+    const loadingPercent = document.getElementById('loadingPercent');
+
     // App State
     let pages = [];
     let currentPageIndex = 0;
     let activePointIndex = -1;
     const cornerNames = ["Kiri Atas", "Kanan Atas", "Kanan Bawah", "Kiri Bawah"];
 
-    // 1. FILE UPLOAD HANDLER
+    // UI YIELD HELPER (Mencegah Layar Hang / Freeze)
+    const yieldThread = () => new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 15)));
+
+    function showLoading(title, subtitle, percent = 0) {
+      loadingTitle.innerText = title;
+      loadingSubtitle.innerText = subtitle;
+      loadingProgressBar.style.width = `${percent}%`;
+      loadingPercent.innerText = `${Math.round(percent)}%`;
+      loadingOverlay.classList.remove('hidden');
+    }
+
+    function updateLoadingProgress(subtitle, percent) {
+      if (subtitle) loadingSubtitle.innerText = subtitle;
+      loadingProgressBar.style.width = `${percent}%`;
+      loadingPercent.innerText = `${Math.round(percent)}%`;
+    }
+
+    function hideLoading() {
+      loadingOverlay.classList.add('hidden');
+    }
+
+    // 1. FILE UPLOAD & PRE-SCALING
     imageUpload.addEventListener('change', (e) => {
       if (e.target.files.length) handleFiles(Array.from(e.target.files));
     });
@@ -283,63 +329,104 @@
       if (e.dataTransfer.files.length) handleFiles(Array.from(e.dataTransfer.files));
     });
 
-    function handleFiles(files) {
+    async function handleFiles(files) {
       const validFiles = files.filter(f => f.type.startsWith('image/'));
       if (!validFiles.length) return;
 
-      let loaded = 0;
-      validFiles.forEach((file) => {
+      showLoading("Memuat Gambar", `Menyiapkan ${validFiles.length} file...`, 10);
+      await yieldThread();
+
+      const startIndex = pages.length;
+
+      for (let i = 0; i < validFiles.length; i++) {
+        const file = validFiles[i];
+        const percent = ((i + 1) / validFiles.length) * 80;
+        updateLoadingProgress(`Memproses foto ${i + 1} dari ${validFiles.length}...`, percent);
+        await yieldThread();
+
+        const img = await loadImageAsync(file);
+        
+        // Optimasi: Limit resolusi ke maks 2048px agar stabil & cepat di HP
+        const scaledImg = await downscaleImageIfNeeded(img, 2048);
+
+        const pageObj = {
+          id: Date.now() + Math.random(),
+          rawImage: scaledImg,
+          corners: [],
+          selectedCornerIndex: 0,
+          filter: 'magic',
+          rotation: 0,
+          isWarped: false,
+          warpedCanvas: document.createElement('canvas')
+        };
+
+        detectDocumentCornersUltra(pageObj);
+        pages.push(pageObj);
+      }
+
+      updateLoadingProgress("Menyiapkan kanvas...", 100);
+      await yieldThread();
+
+      dropZone.classList.add('hidden');
+      thumbSection.classList.remove('hidden');
+      bottomControls.classList.remove('hidden');
+      btnExportPDF.disabled = false;
+
+      selectPage(startIndex);
+      renderThumbnails();
+      updatePageBadge();
+
+      hideLoading();
+      imageUpload.value = '';
+    }
+
+    function loadImageAsync(file) {
+      return new Promise((resolve) => {
         const reader = new FileReader();
         reader.onload = (e) => {
           const img = new Image();
-          img.onload = () => {
-            const pageObj = {
-              id: Date.now() + Math.random(),
-              rawImage: img,
-              corners: [],
-              selectedCornerIndex: 0,
-              filter: 'magic',
-              rotation: 0,
-              isWarped: false,
-              warpedCanvas: document.createElement('canvas')
-            };
-
-            // Jalankan deteksi garis presisi
-            detectDocumentCornersUltra(pageObj);
-
-            pages.push(pageObj);
-            loaded++;
-
-            if (loaded === validFiles.length) {
-              dropZone.classList.add('hidden');
-              thumbSection.classList.remove('hidden');
-              bottomControls.classList.remove('hidden');
-              btnExportPDF.disabled = false;
-              
-              selectPage(pages.length - validFiles.length);
-              renderThumbnails();
-              updatePageBadge();
-            }
-          };
+          img.onload = () => resolve(img);
           img.src = e.target.result;
         };
         reader.readAsDataURL(file);
       });
-      imageUpload.value = '';
+    }
+
+    async function downscaleImageIfNeeded(img, maxDim) {
+      if (img.width <= maxDim && img.height <= maxDim) return img;
+      
+      const oc = document.createElement('canvas');
+      let w = img.width, h = img.height;
+      if (w > h) {
+        h = Math.round((h * maxDim) / w);
+        w = maxDim;
+      } else {
+        w = Math.round((w * maxDim) / h);
+        h = maxDim;
+      }
+      oc.width = w;
+      oc.height = h;
+      const octx = oc.getContext('2d');
+      octx.drawImage(img, 0, 0, w, h);
+
+      const newImg = new Image();
+      newImg.src = oc.toDataURL('image/jpeg', 0.95);
+      await new Promise(r => newImg.onload = r);
+      return newImg;
     }
 
     function updatePageBadge() {
       pageBadge.innerText = `${currentPageIndex + 1}/${pages.length} Hal`;
     }
 
-    // 2. LINE-INTERSECTION DETECTION
+    // 2. CORNER DETECTION (OTSU + LINEAR REGRESSION)
     function detectDocumentCornersUltra(pageObj) {
       const img = pageObj.rawImage;
       const W = img.width;
       const H = img.height;
 
-      const sw = 220;
-      const sh = Math.round((H / W) * 220);
+      const sw = 200;
+      const sh = Math.round((H / W) * 200);
       const scaleX = W / sw;
       const scaleY = H / sh;
 
@@ -380,7 +467,7 @@
           threshold = t;
         }
       }
-      threshold = Math.max(100, threshold);
+      threshold = Math.max(95, threshold);
 
       const mask = new Uint8Array(sw * sh);
       let count = 0;
@@ -396,28 +483,28 @@
 
       if (count < (sw * sh) * 0.1) {
         pageObj.corners = [
-          { x: W * 0.06, y: H * 0.06 },
-          { x: W * 0.94, y: H * 0.06 },
-          { x: W * 0.94, y: H * 0.94 },
-          { x: W * 0.06, y: H * 0.94 }
+          { x: W * 0.05, y: H * 0.05 },
+          { x: W * 0.95, y: H * 0.05 },
+          { x: W * 0.95, y: H * 0.95 },
+          { x: W * 0.05, y: H * 0.95 }
         ];
         return;
       }
 
       const topPts = [], botPts = [], leftPts = [], rightPts = [];
-      for (let x = 8; x < sw - 8; x += 2) {
-        for (let y = 4; y < sh - 4; y++) {
+      for (let x = 6; x < sw - 6; x += 2) {
+        for (let y = 3; y < sh - 3; y++) {
           if (mask[y * sw + x] === 1) { topPts.push({ x, y }); break; }
         }
-        for (let y = sh - 5; y >= 4; y--) {
+        for (let y = sh - 4; y >= 3; y--) {
           if (mask[y * sw + x] === 1) { botPts.push({ x, y }); break; }
         }
       }
-      for (let y = 8; y < sh - 8; y += 2) {
-        for (let x = 4; x < sw - 4; x++) {
+      for (let y = 6; y < sh - 6; y += 2) {
+        for (let x = 3; x < sw - 3; x++) {
           if (mask[y * sw + x] === 1) { leftPts.push({ x, y }); break; }
         }
-        for (let x = sw - 5; x >= 4; x--) {
+        for (let x = sw - 4; x >= 3; x--) {
           if (mask[y * sw + x] === 1) { rightPts.push({ x, y }); break; }
         }
       }
@@ -464,7 +551,7 @@
       return { x, y };
     }
 
-    // 3. PAGE SELECTION
+    // 3. PAGE VIEW & THUMBNAILS
     function selectPage(idx) {
       if (idx < 0 || idx >= pages.length) return;
       currentPageIndex = idx;
@@ -544,7 +631,7 @@
       updatePageBadge();
     }
 
-    // 4. OVERLAY & TOUCH HANDLER
+    // 4. OVERLAY & TOUCH CONTROLS
     function renderCropOverlay() {
       const curPage = pages[currentPageIndex];
       if (!curPage) return;
@@ -689,10 +776,18 @@
       window.ontouchend = end;
     }
 
-    // 5. WARPING & FILTERS
-    btnApplyWarp.addEventListener('click', () => {
-      warpPage(pages[currentPageIndex]);
+    // 5. ASYNC PERSPECTIVE WARPING & FILTERING
+    btnApplyWarp.addEventListener('click', async () => {
+      showLoading("Meluruskan Dokumen", "Mengkalkulasi perspektif...", 35);
+      await yieldThread();
+
+      await warpPageAsync(pages[currentPageIndex]);
+      
+      updateLoadingProgress("Menerapkan filter...", 90);
+      await yieldThread();
+
       selectPage(currentPageIndex);
+      hideLoading();
     });
 
     btnBackToCrop.addEventListener('click', () => {
@@ -700,7 +795,7 @@
       selectPage(currentPageIndex);
     });
 
-    function warpPage(pageObj) {
+    async function warpPageAsync(pageObj) {
       const pts = pageObj.corners;
       const widthTop = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
       const widthBottom = Math.hypot(pts[2].x - pts[3].x, pts[2].y - pts[3].y);
@@ -727,19 +822,23 @@
       const p0 = pts[0], p1 = pts[1], p2 = pts[2], p3 = pts[3];
       const srcW = sCanvas.width, srcH = sCanvas.height;
 
+      // Pemrosesan Loop Teroptimasi
       for (let y = 0; y < dstH; y++) {
         const v = y / dstH;
+        const v1 = 1 - v;
         for (let x = 0; x < dstW; x++) {
           const u = x / dstW;
-          const sx = (1 - u) * (1 - v) * p0.x + u * (1 - v) * p1.x + u * v * p2.x + (1 - u) * v * p3.x;
-          const sy = (1 - u) * (1 - v) * p0.y + u * (1 - v) * p1.y + u * v * p2.y + (1 - u) * v * p3.y;
+          const u1 = 1 - u;
 
-          const isx = Math.floor(sx);
-          const isy = Math.floor(sy);
+          const sx = (u1 * v1 * p0.x) + (u * v1 * p1.x) + (u * v * p2.x) + (u1 * v * p3.x);
+          const sy = (u1 * v1 * p0.y) + (u * v1 * p1.y) + (u * v * p2.y) + (u1 * v * p3.y);
+
+          const isx = sx | 0;
+          const isy = sy | 0;
 
           if (isx >= 0 && isx < srcW && isy >= 0 && isy < srcH) {
-            const srcIdx = (isy * srcW + isx) * 4;
-            const dstIdx = (y * dstW + x) * 4;
+            const srcIdx = (isy * srcW + isx) << 2;
+            const dstIdx = (y * dstW + x) << 2;
             dstData[dstIdx]     = srcData[srcIdx];
             dstData[dstIdx + 1] = srcData[srcIdx + 1];
             dstData[dstIdx + 2] = srcData[srcIdx + 2];
@@ -767,31 +866,33 @@
       resultCtx.drawImage(pageObj.warpedCanvas, 0, 0);
 
       const imgData = resultCtx.getImageData(0, 0, resultCanvas.width, resultCanvas.height);
+      applyFilterToImageData(imgData, pageObj.filter);
+      resultCtx.putImageData(imgData, 0, 0);
+    }
+
+    function applyFilterToImageData(imgData, filter) {
       const data = imgData.data;
       const len = data.length;
 
-      if (pageObj.filter === 'magic') {
+      if (filter === 'magic') {
         for (let i = 0; i < len; i += 4) {
           let r = data[i], g = data[i + 1], b = data[i + 2];
-          r = ((r - 128) * 1.45) + 155;
-          g = ((g - 128) * 1.45) + 155;
-          b = ((b - 128) * 1.45) + 155;
-          data[i]     = Math.min(255, Math.max(0, r));
-          data[i + 1] = Math.min(255, Math.max(0, g));
-          data[i + 2] = Math.min(255, Math.max(0, b));
+          data[i]     = Math.min(255, Math.max(0, ((r - 128) * 1.45) + 155));
+          data[i + 1] = Math.min(255, Math.max(0, ((g - 128) * 1.45) + 155));
+          data[i + 2] = Math.min(255, Math.max(0, ((b - 128) * 1.45) + 155));
         }
-      } else if (pageObj.filter === 'bw') {
+      } else if (filter === 'bw') {
         for (let i = 0; i < len; i += 4) {
-          const avg = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-          data[i] = data[i + 1] = data[i + 2] = avg > 130 ? 255 : (avg < 75 ? 0 : (avg - 75) * 4.6);
+          const avg = (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+          const val = avg > 130 ? 255 : (avg < 75 ? 0 : (avg - 75) * 4.6);
+          data[i] = data[i + 1] = data[i + 2] = val;
         }
-      } else if (pageObj.filter === 'gray') {
+      } else if (filter === 'gray') {
         for (let i = 0; i < len; i += 4) {
           const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
           data[i] = data[i + 1] = data[i + 2] = gray;
         }
       }
-      resultCtx.putImageData(imgData, 0, 0);
     }
 
     window.applyFilterToCurrent = function(type) {
@@ -799,10 +900,16 @@
       renderFinalPageResult(pages[currentPageIndex]);
     };
 
-    window.applyFilterToAll = function() {
+    window.applyFilterToAll = async function() {
+      showLoading("Menerapkan Filter", "Memperbarui semua halaman...", 50);
+      await yieldThread();
+
       const type = pages[currentPageIndex].filter;
       pages.forEach(p => { p.filter = type; });
       renderFinalPageResult(pages[currentPageIndex]);
+      renderThumbnails();
+
+      hideLoading();
     };
 
     window.rotateCurrent = function(deg) {
@@ -826,14 +933,26 @@
       renderThumbnails();
     };
 
-    // 6. PDF EXPORT
-    btnExportPDF.addEventListener('click', () => {
+    // 6. ASYNC PDF EXPORT BERTAHAP DENGAN PROGRESS BAR
+    btnExportPDF.addEventListener('click', async () => {
       if (!pages.length) return;
+
       const { jsPDF } = window.jspdf;
       let pdf = null;
+      const totalPages = pages.length;
 
-      pages.forEach((page, index) => {
-        if (!page.isWarped) warpPage(page);
+      showLoading("Membuat PDF", `Menyiapkan halaman 1 dari ${totalPages}...`, 5);
+      await yieldThread();
+
+      for (let index = 0; index < totalPages; index++) {
+        const page = pages[index];
+        const stepPercent = ((index + 1) / totalPages) * 90;
+        updateLoadingProgress(`Memproses & merender Hal ${index + 1}/${totalPages}...`, stepPercent);
+        await yieldThread();
+
+        if (!page.isWarped) {
+          await warpPageAsync(page);
+        }
 
         const bufferCanvas = document.createElement('canvas');
         bufferCanvas.width = page.warpedCanvas.width;
@@ -842,26 +961,7 @@
         bCtx.drawImage(page.warpedCanvas, 0, 0);
 
         const imgData = bCtx.getImageData(0, 0, bufferCanvas.width, bufferCanvas.height);
-        const data = imgData.data;
-        const len = data.length;
-
-        if (page.filter === 'magic') {
-          for (let i = 0; i < len; i += 4) {
-            data[i]     = Math.min(255, Math.max(0, ((data[i] - 128) * 1.45) + 155));
-            data[i + 1] = Math.min(255, Math.max(0, ((data[i + 1] - 128) * 1.45) + 155));
-            data[i + 2] = Math.min(255, Math.max(0, ((data[i + 2] - 128) * 1.45) + 155));
-          }
-        } else if (page.filter === 'bw') {
-          for (let i = 0; i < len; i += 4) {
-            const avg = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-            data[i] = data[i + 1] = data[i + 2] = avg > 130 ? 255 : (avg < 75 ? 0 : (avg - 75) * 4.6);
-          }
-        } else if (page.filter === 'gray') {
-          for (let i = 0; i < len; i += 4) {
-            const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-            data[i] = data[i + 1] = data[i + 2] = gray;
-          }
-        }
+        applyFilterToImageData(imgData, page.filter);
         bCtx.putImageData(imgData, 0, 0);
 
         const isLandscape = bufferCanvas.width > bufferCanvas.height;
@@ -873,10 +973,18 @@
           pdf.addPage([bufferCanvas.width, bufferCanvas.height], orientation);
         }
 
-        pdf.addImage(bufferCanvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, bufferCanvas.width, bufferCanvas.height);
-      });
+        const dataUrl = bufferCanvas.toDataURL('image/jpeg', 0.90);
+        pdf.addImage(dataUrl, 'JPEG', 0, 0, bufferCanvas.width, bufferCanvas.height);
+      }
+
+      updateLoadingProgress("Menyimpan & mengunduh PDF...", 98);
+      await yieldThread();
 
       pdf.save(`DocuScan_${pages.length}_Hal_${Date.now()}.pdf`);
+
+      updateLoadingProgress("Selesai!", 100);
+      await yieldThread();
+      hideLoading();
     });
   </script>
 </body>
