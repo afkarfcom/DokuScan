@@ -2,15 +2,15 @@
 <html lang="id" class="dark">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DocuScan Pro - Multi-Page Scanner</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>DocuScan Pro - Mobile First</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- jsPDF -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  
+
   <script>
     tailwind.config = {
       darkMode: 'class',
@@ -23,19 +23,34 @@
       }
     }
   </script>
+
   <style>
-    .canvas-container { touch-action: none; user-select: none; }
+    /* Prevent bouncy scroll & selection on mobile */
+    html, body {
+      height: 100%;
+      height: 100dvh;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      touch-action: manipulation;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    .canvas-container {
+      touch-action: none;
+    }
+    /* Floating Magnifier */
     #magnifier {
       pointer-events: none;
-      position: absolute;
-      width: 130px;
-      height: 130px;
+      position: fixed;
+      width: 110px;
+      height: 110px;
       border-radius: 50%;
       border: 3px solid #10b981;
-      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.7), 0 0 20px rgba(16,185,129,0.4);
+      box-shadow: 0 12px 30px rgba(0,0,0,0.8), 0 0 15px rgba(16,185,129,0.5);
       background-repeat: no-repeat;
       display: none;
-      z-index: 50;
+      z-index: 9999;
     }
     #magnifier::after {
       content: '';
@@ -47,233 +62,407 @@
       border-radius: 50%;
       box-shadow: 0 0 0 2px white;
     }
-    /* Custom scrollbar */
-    ::-webkit-scrollbar { width: 5px; height: 5px; }
-    ::-webkit-scrollbar-track { background: #090d16; }
-    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+    /* No scrollbar */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 flex flex-col h-screen overflow-hidden font-sans">
+<body class="bg-slate-950 text-slate-100 flex flex-col h-[100dvh] w-screen overflow-hidden font-sans select-none">
 
-  <!-- NAVBAR -->
-  <header class="h-16 border-b border-slate-800 bg-slate-900/90 backdrop-blur px-4 flex items-center justify-between shrink-0 z-20">
-    <div class="flex items-center space-x-3">
-      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-emerald-400 flex items-center justify-center shadow-lg shadow-brand-500/20">
-        <i data-lucide="layers" class="w-6 h-6 text-white"></i>
+  <!-- 1. COMPACT TOP APP BAR -->
+  <header class="h-14 bg-slate-900/95 backdrop-blur border-b border-slate-800 px-3 flex items-center justify-between shrink-0 z-30">
+    <div class="flex items-center space-x-2">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-brand-600 to-emerald-400 flex items-center justify-center shadow-md">
+        <i data-lucide="scan-line" class="w-4 h-4 text-white"></i>
       </div>
       <div>
-        <div class="flex items-center gap-2">
-          <h1 class="font-bold text-lg leading-none tracking-tight">DocuScan <span class="text-brand-500">Multi</span></h1>
-          <span id="pageCountBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-brand-500/10 border border-brand-500/30 text-brand-400 font-medium">0 Halaman</span>
+        <div class="flex items-center gap-1.5">
+          <h1 class="font-bold text-sm leading-none tracking-tight">DocuScan</h1>
+          <span id="workerBadge" class="text-[9px] px-1.5 py-0.5 rounded bg-brand-500/10 text-brand-400 font-mono border border-brand-500/20">Worker: Aktif ⚡</span>
         </div>
-        <p class="text-xs text-slate-400 mt-0.5">Batch Document Scanner</p>
       </div>
     </div>
 
-    <!-- Actions -->
-    <div class="flex items-center space-x-2">
-      <label for="imageUpload" class="cursor-pointer px-3.5 py-2 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs sm:text-sm font-medium rounded-lg flex items-center gap-1.5 transition border border-slate-700">
-        <i data-lucide="plus-circle" class="w-4 h-4 text-brand-400"></i>
-        <span>Tambah Halaman</span>
+    <!-- Right Header Actions -->
+    <div class="flex items-center space-x-1.5">
+      <label for="imageUpload" class="cursor-pointer p-2 bg-slate-800 hover:bg-slate-700 active:scale-90 text-slate-200 rounded-lg flex items-center justify-center border border-slate-700 transition" title="Tambah Halaman">
+        <i data-lucide="plus" class="w-4 h-4 text-brand-400"></i>
       </label>
       <input type="file" id="imageUpload" accept="image/*" multiple class="hidden">
 
-      <button id="btnExportPDF" disabled class="px-4 py-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:hover:bg-brand-600 text-white text-xs sm:text-sm font-medium rounded-lg flex items-center gap-2 shadow-lg shadow-brand-600/20 transition active:scale-95">
-        <i data-lucide="file-down" class="w-4 h-4"></i>
-        <span id="pdfBtnLabel">Export PDF</span>
+      <button id="btnExportPDF" disabled class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 disabled:opacity-30 disabled:pointer-events-none text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-md shadow-brand-600/20 transition active:scale-95">
+        <i data-lucide="file-down" class="w-3.5 h-3.5"></i>
+        <span id="pdfBtnText">PDF</span>
       </button>
     </div>
   </header>
 
-  <!-- MAIN CONTAINER -->
-  <div class="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
+  <!-- 2. THUMBNAILS CAROUSEL (Tersusun Rapi di Bawah Header) -->
+  <div id="thumbBar" class="h-20 bg-slate-900/50 border-b border-slate-800/80 px-3 py-1.5 flex items-center gap-2 overflow-x-auto no-scrollbar shrink-0 hidden z-20">
+    <!-- Thumbnails injected via JS -->
+  </div>
 
-    <!-- UPLOAD DROPZONE (STATE AWAL) -->
+  <!-- 3. MAIN WORKSPACE (VIEWPORT) -->
+  <main class="flex-1 bg-slate-950 relative flex items-center justify-center overflow-hidden p-2 sm:p-4">
+    <!-- Magnifier Loupe -->
+    <div id="magnifier"></div>
+
+    <!-- Spinner Loading -->
+    <div id="loadingOverlay" class="absolute inset-0 z-40 bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center hidden">
+      <div class="w-10 h-10 border-4 border-brand-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+      <p id="loadingText" class="text-xs font-medium text-slate-300">Memproses di Background Thread...</p>
+    </div>
+
+    <!-- EMPTY STATE / UPLOAD DROPZONE -->
     <div id="dropZone" class="absolute inset-0 z-30 bg-slate-950 flex flex-col items-center justify-center p-6 text-center">
-      <div class="max-w-md w-full p-8 rounded-2xl border-2 border-dashed border-slate-700 hover:border-brand-500/70 bg-slate-900/40 hover:bg-slate-900/80 transition-all flex flex-col items-center group cursor-pointer" onclick="document.getElementById('imageUpload').click()">
-        <div class="w-20 h-20 rounded-full bg-slate-800 group-hover:bg-brand-500/10 flex items-center justify-center mb-4 transition text-slate-400 group-hover:text-brand-500">
-          <i data-lucide="files" class="w-10 h-10"></i>
+      <div class="max-w-xs w-full p-6 rounded-2xl border-2 border-dashed border-slate-700 bg-slate-900/40 flex flex-col items-center cursor-pointer active:scale-95 transition" onclick="document.getElementById('imageUpload').click()">
+        <div class="w-14 h-14 rounded-full bg-slate-800 text-brand-400 flex items-center justify-center mb-3">
+          <i data-lucide="camera" class="w-7 h-7"></i>
         </div>
-        <h3 class="text-lg font-semibold text-slate-200 mb-1">Unggah Beberapa Gambar Dokumen</h3>
-        <p class="text-sm text-slate-400 mb-6">Pilih 1 atau banyak foto sekaligus untuk dipindai menjadi berkas PDF.</p>
-        <button class="px-6 py-3 bg-brand-600 hover:bg-brand-500 text-white font-medium rounded-xl shadow-lg shadow-brand-600/30 flex items-center gap-2 transition">
-          <i data-lucide="upload-cloud" class="w-5 h-5"></i>
-          <span>Pilih File (Bisa Banyak)</span>
+        <h2 class="text-sm font-semibold text-slate-200 mb-1">Pindai Dokumen</h2>
+        <p class="text-xs text-slate-400 mb-4">Pilih 1 atau banyak gambar dari galeri / kamera</p>
+        <button class="w-full py-2.5 bg-brand-600 text-white text-xs font-semibold rounded-xl shadow-lg shadow-brand-600/30 flex items-center justify-center gap-2">
+          <i data-lucide="plus-circle" class="w-4 h-4"></i>
+          <span>Pilih Foto</span>
         </button>
       </div>
     </div>
 
-    <!-- LEFT SIDEBAR: THUMBNAILS LIST -->
-    <aside id="pageSidebar" class="w-full lg:w-48 border-b lg:border-b-0 lg:border-r border-slate-800 bg-slate-900/70 backdrop-blur p-3 flex lg:flex-col gap-3 overflow-x-auto lg:overflow-y-auto shrink-0 hidden">
-      <div class="hidden lg:flex items-center justify-between px-1 mb-1">
-        <span class="text-xs font-semibold uppercase text-slate-400">Daftar Berkas</span>
-        <label for="imageUpload" class="text-brand-400 hover:underline text-xs cursor-pointer flex items-center gap-0.5">
-          <i data-lucide="plus" class="w-3 h-3"></i> Tambah
-        </label>
+    <!-- CROP STAGE -->
+    <div id="cropStage" class="w-full h-full flex items-center justify-center hidden">
+      <div class="canvas-container relative max-w-full max-h-full flex items-center justify-center">
+        <canvas id="cropCanvas" class="max-w-full max-h-[calc(100dvh-280px)] sm:max-h-[calc(100dvh-230px)] object-contain rounded-lg shadow-2xl border border-slate-800"></canvas>
       </div>
-      <!-- Thumbnail List Container -->
-      <div id="thumbList" class="flex lg:flex-col gap-2.5 w-full"></div>
-    </aside>
+    </div>
 
-    <!-- CENTER: CANVAS VIEWPORT -->
-    <main class="flex-1 bg-slate-950 p-4 flex items-center justify-center relative overflow-hidden">
-      <div id="magnifier"></div>
+    <!-- RESULT STAGE -->
+    <div id="previewStage" class="w-full h-full flex items-center justify-center hidden">
+      <div class="relative max-w-full max-h-full flex items-center justify-center">
+        <canvas id="resultCanvas" class="max-w-full max-h-[calc(100dvh-280px)] sm:max-h-[calc(100dvh-230px)] object-contain rounded-lg shadow-2xl bg-white"></canvas>
+      </div>
+    </div>
+  </main>
 
-      <!-- Crop Stage -->
-      <div id="cropStage" class="relative w-full h-full flex items-center justify-center hidden">
-        <div class="relative max-w-full max-h-full canvas-container shadow-2xl rounded-lg overflow-hidden border border-slate-800">
-          <canvas id="cropCanvas" class="max-w-full max-h-[75vh] object-contain block"></canvas>
+  <!-- 4. BOTTOM ACTION CONTROL (CamScanner Native Mobile Dock) -->
+  <footer id="bottomControls" class="bg-slate-900/95 border-t border-slate-800 shrink-0 z-30 transition-all hidden">
+    
+    <!-- SUB-VIEW: CROP CONTROLS -->
+    <div id="cropDock" class="p-3 space-y-2.5">
+      <!-- Info Bar & Actions -->
+      <div class="flex items-center justify-between px-1">
+        <div class="flex items-center gap-1.5">
+          <span id="pageBadge" class="text-xs font-bold text-slate-200">Hal 1</span>
+          <span class="text-[10px] text-brand-400 bg-brand-500/10 px-1.5 py-0.5 rounded border border-brand-500/20">AI Line Locked</span>
+        </div>
+        
+        <div class="flex items-center gap-1">
+          <button onclick="toggleDpadModal()" class="px-2.5 py-1 bg-slate-800 active:bg-slate-700 text-[11px] text-slate-300 font-medium rounded-md border border-slate-700 flex items-center gap-1">
+            <i data-lucide="gamepad-2" class="w-3.5 h-3.5 text-brand-400"></i>
+            <span>D-Pad</span>
+          </button>
+          <button onclick="deleteCurrentPage()" class="p-1 text-rose-400 hover:text-rose-300 active:scale-90">
+            <i data-lucide="trash-2" class="w-4 h-4"></i>
+          </button>
         </div>
       </div>
 
-      <!-- Result Stage -->
-      <div id="previewStage" class="relative w-full h-full flex items-center justify-center hidden">
-        <div class="relative max-w-full max-h-full shadow-2xl rounded-lg overflow-hidden border border-slate-800 bg-white">
-          <canvas id="resultCanvas" class="max-w-full max-h-[75vh] object-contain block"></canvas>
-        </div>
+      <!-- Main Buttons Grid -->
+      <div class="grid grid-cols-3 gap-2">
+        <button id="btnAutoDetect" class="py-2.5 bg-slate-800 active:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 flex items-center justify-center gap-1.5 transition">
+          <i data-lucide="sparkles" class="w-3.5 h-3.5 text-brand-400"></i>
+          <span>Snap AI</span>
+        </button>
+        <button id="btnFullArea" class="py-2.5 bg-slate-800 active:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 flex items-center justify-center gap-1.5 transition">
+          <i data-lucide="maximize" class="w-3.5 h-3.5 text-slate-400"></i>
+          <span>Full</span>
+        </button>
+        <button id="btnApplyWarp" class="py-2.5 bg-brand-600 active:bg-brand-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-brand-600/30 flex items-center justify-center gap-1.5 transition">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span>Luruskan</span>
+        </button>
       </div>
-    </main>
+    </div>
 
-    <!-- RIGHT CONTROL PANEL -->
-    <aside id="controlPanel" class="w-full lg:w-80 border-t lg:border-t-0 lg:border-l border-slate-800 bg-slate-900/90 backdrop-blur p-4 flex flex-col justify-between shrink-0 overflow-y-auto hidden">
+    <!-- SUB-VIEW: PREVIEW & FILTER CONTROLS -->
+    <div id="filterDock" class="p-3 space-y-2.5 hidden">
+      <!-- Filter selection tabs -->
+      <div class="grid grid-cols-4 gap-1.5">
+        <button onclick="applyFilterToCurrent('magic')" class="filter-btn active py-2 bg-slate-800 rounded-lg text-center border border-brand-500 flex flex-col items-center gap-0.5" data-filter="magic">
+          <i data-lucide="wand-2" class="w-3.5 h-3.5 text-brand-400"></i>
+          <span class="text-[10px] font-medium">Magic</span>
+        </button>
+        <button onclick="applyFilterToCurrent('bw')" class="filter-btn py-2 bg-slate-800 rounded-lg text-center border border-slate-700 flex flex-col items-center gap-0.5" data-filter="bw">
+          <i data-lucide="contrast" class="w-3.5 h-3.5 text-slate-300"></i>
+          <span class="text-[10px] font-medium">B&W</span>
+        </button>
+        <button onclick="applyFilterToCurrent('gray')" class="filter-btn py-2 bg-slate-800 rounded-lg text-center border border-slate-700 flex flex-col items-center gap-0.5" data-filter="gray">
+          <i data-lucide="sun-medium" class="w-3.5 h-3.5 text-slate-300"></i>
+          <span class="text-[10px] font-medium">Gray</span>
+        </button>
+        <button onclick="applyFilterToCurrent('original')" class="filter-btn py-2 bg-slate-800 rounded-lg text-center border border-slate-700 flex flex-col items-center gap-0.5" data-filter="original">
+          <i data-lucide="image" class="w-3.5 h-3.5 text-slate-300"></i>
+          <span class="text-[10px] font-medium">Asli</span>
+        </button>
+      </div>
+
+      <!-- Action Footer -->
+      <div class="flex items-center gap-2">
+        <button id="btnBackToCrop" class="flex-1 py-2 bg-slate-800 active:bg-slate-700 text-xs font-semibold rounded-xl border border-slate-700 flex items-center justify-center gap-1.5">
+          <i data-lucide="crop" class="w-3.5 h-3.5 text-brand-400"></i>
+          <span>Atur Sudut</span>
+        </button>
+        <button onclick="rotateCurrent(90)" class="px-4 py-2 bg-slate-800 active:bg-slate-700 text-xs font-semibold rounded-xl border border-slate-700 flex items-center justify-center gap-1">
+          <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+          <span>Putar</span>
+        </button>
+        <button onclick="applyFilterToAll()" class="px-3 py-2 bg-slate-800 active:bg-slate-700 text-[11px] font-medium rounded-xl border border-slate-700">
+          Semua Hal
+        </button>
+      </div>
+    </div>
+  </footer>
+
+  <!-- 5. D-PAD MICRO CONTROLLER (BOTTOM SHEET MODAL) -->
+  <div id="dpadModal" class="fixed inset-x-0 bottom-0 z-50 bg-slate-900/95 border-t border-slate-800 p-4 rounded-t-2xl shadow-2xl backdrop-blur transform translate-y-full transition-transform duration-200">
+    <div class="flex items-center justify-between pb-2 border-b border-slate-800 mb-3">
+      <div class="flex items-center gap-2">
+        <span class="text-xs font-bold text-slate-200">Fine-Tuning Sudut</span>
+        <span id="activeCornerLabel" class="text-[10px] text-brand-400 bg-brand-500/10 px-1.5 py-0.5 rounded font-mono">Pojok Kiri Atas</span>
+      </div>
+      <button onclick="toggleDpadModal()" class="text-xs text-slate-400 hover:text-white font-bold p-1">Tutup</button>
+    </div>
+
+    <!-- D-PAD Arrows -->
+    <div class="grid grid-cols-3 gap-2 w-36 mx-auto">
+      <div></div>
+      <button onclick="nudgeActiveCorner(0, -2)" class="p-2.5 bg-slate-800 active:bg-brand-600 rounded-xl flex items-center justify-center border border-slate-700 text-slate-200">
+        <i data-lucide="chevron-up" class="w-5 h-5"></i>
+      </button>
+      <div></div>
       
-      <!-- CROP CONTROLS -->
-      <div id="cropControls" class="space-y-4">
-        <div>
-          <div class="flex items-center justify-between">
-            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400" id="currentEditingPageTitle">Halaman 1</h2>
-            <button onclick="deleteCurrentPage()" class="text-rose-400 hover:text-rose-300 text-xs flex items-center gap-1">
-              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Hapus
-            </button>
-          </div>
-          <p class="text-xs text-slate-500 mt-1">4 Sudut otomatis mengunci kertas. Geser sudut jika butuh penyesuaian.</p>
-        </div>
+      <button onclick="nudgeActiveCorner(-2, 0)" class="p-2.5 bg-slate-800 active:bg-brand-600 rounded-xl flex items-center justify-center border border-slate-700 text-slate-200">
+        <i data-lucide="chevron-left" class="w-5 h-5"></i>
+      </button>
+      <button onclick="cycleCornerSelection()" class="p-2.5 bg-brand-600/20 active:bg-brand-600 rounded-xl flex items-center justify-center border border-brand-500/50 text-brand-400">
+        <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+      </button>
+      <button onclick="nudgeActiveCorner(2, 0)" class="p-2.5 bg-slate-800 active:bg-brand-600 rounded-xl flex items-center justify-center border border-slate-700 text-slate-200">
+        <i data-lucide="chevron-right" class="w-5 h-5"></i>
+      </button>
 
-        <div class="grid grid-cols-2 gap-2">
-          <button id="btnAutoDetect" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-medium rounded-lg flex items-center justify-center gap-1.5 border border-slate-700 transition active:scale-95">
-            <i data-lucide="sparkles" class="w-3.5 h-3.5 text-brand-400"></i>
-            <span>Snap Garis AI</span>
-          </button>
-          <button id="btnFullArea" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-medium rounded-lg flex items-center justify-center gap-1.5 border border-slate-700 transition active:scale-95">
-            <i data-lucide="maximize" class="w-3.5 h-3.5 text-slate-400"></i>
-            <span>Full Area</span>
-          </button>
-        </div>
-
-        <!-- D-PAD MICRO ADJUSTMENT -->
-        <div class="p-3 bg-slate-950/70 border border-slate-800 rounded-xl space-y-2">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-semibold text-slate-300">Fine-Tuning Sudut</span>
-            <span id="activeCornerLabel" class="text-[10px] text-brand-400 font-mono bg-brand-500/10 px-1.5 py-0.5 rounded">Pojok Kiri Atas</span>
-          </div>
-          
-          <div class="grid grid-cols-3 gap-1.5 w-32 mx-auto pt-1">
-            <div></div>
-            <button onclick="nudgeActiveCorner(0, -2)" class="p-2 bg-slate-800 hover:bg-slate-700 active:bg-brand-600 rounded-lg flex items-center justify-center border border-slate-700 text-slate-300 transition shadow">
-              <i data-lucide="chevron-up" class="w-4 h-4"></i>
-            </button>
-            <div></div>
-            
-            <button onclick="nudgeActiveCorner(-2, 0)" class="p-2 bg-slate-800 hover:bg-slate-700 active:bg-brand-600 rounded-lg flex items-center justify-center border border-slate-700 text-slate-300 transition shadow">
-              <i data-lucide="chevron-left" class="w-4 h-4"></i>
-            </button>
-            <button onclick="detectDocumentCornersUltra(pages[currentPageIndex])" title="Reset Garis" class="p-2 bg-brand-600/30 hover:bg-brand-600/50 rounded-lg flex items-center justify-center border border-brand-500/50 text-brand-400 transition shadow">
-              <i data-lucide="crosshair" class="w-4 h-4"></i>
-            </button>
-            <button onclick="nudgeActiveCorner(2, 0)" class="p-2 bg-slate-800 hover:bg-slate-700 active:bg-brand-600 rounded-lg flex items-center justify-center border border-slate-700 text-slate-300 transition shadow">
-              <i data-lucide="chevron-right" class="w-4 h-4"></i>
-            </button>
-
-            <div></div>
-            <button onclick="nudgeActiveCorner(0, 2)" class="p-2 bg-slate-800 hover:bg-slate-700 active:bg-brand-600 rounded-lg flex items-center justify-center border border-slate-700 text-slate-300 transition shadow">
-              <i data-lucide="chevron-down" class="w-4 h-4"></i>
-            </button>
-            <div></div>
-          </div>
-        </div>
-
-        <div class="pt-2 border-t border-slate-800 flex flex-col gap-2">
-          <button id="btnApplyWarp" class="w-full py-3 bg-brand-600 hover:bg-brand-500 text-white font-medium rounded-xl shadow-lg shadow-brand-500/25 flex items-center justify-center gap-2 transition active:scale-98">
-            <i data-lucide="check" class="w-5 h-5"></i>
-            <span>Luruskan Halaman Ini</span>
-          </button>
-          <button onclick="warpAllPages()" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg flex items-center justify-center gap-1.5 border border-slate-700">
-            <i data-lucide="check-check" class="w-4 h-4 text-brand-400"></i>
-            <span>Luruskan Semua Halaman</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- FILTER CONTROLS -->
-      <div id="filterControls" class="space-y-4 hidden">
-        <div>
-          <div class="flex items-center justify-between mb-3">
-            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Filter Dokumen</h2>
-            <button id="btnBackToCrop" class="text-xs text-brand-400 hover:underline flex items-center gap-1">
-              <i data-lucide="crop" class="w-3.5 h-3.5"></i> Edit Sudut
-            </button>
-          </div>
-          
-          <div class="grid grid-cols-2 gap-2">
-            <button onclick="applyFilterToCurrent('magic')" class="filter-btn p-3 bg-slate-800/80 hover:bg-slate-700 border border-brand-500 rounded-xl text-left transition flex flex-col gap-1.5" data-filter="magic">
-              <i data-lucide="wand-2" class="w-4 h-4 text-brand-400"></i>
-              <span class="text-xs font-medium text-slate-200">Magic Color</span>
-            </button>
-            <button onclick="applyFilterToCurrent('bw')" class="filter-btn p-3 bg-slate-800/80 hover:bg-slate-700 border border-slate-700 rounded-xl text-left transition flex flex-col gap-1.5" data-filter="bw">
-              <i data-lucide="contrast" class="w-4 h-4 text-slate-300"></i>
-              <span class="text-xs font-medium text-slate-200">B&W Doc</span>
-            </button>
-            <button onclick="applyFilterToCurrent('gray')" class="filter-btn p-3 bg-slate-800/80 hover:bg-slate-700 border border-slate-700 rounded-xl text-left transition flex flex-col gap-1.5" data-filter="gray">
-              <i data-lucide="sun-medium" class="w-4 h-4 text-slate-300"></i>
-              <span class="text-xs font-medium text-slate-200">Grayscale</span>
-            </button>
-            <button onclick="applyFilterToCurrent('original')" class="filter-btn p-3 bg-slate-800/80 hover:bg-slate-700 border border-slate-700 rounded-xl text-left transition flex flex-col gap-1.5" data-filter="original">
-              <i data-lucide="image" class="w-4 h-4 text-slate-300"></i>
-              <span class="text-xs font-medium text-slate-200">Asli</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Rotate -->
-        <div class="pt-3 border-t border-slate-800">
-          <label class="text-xs text-slate-400 font-medium mb-2 block">Rotasi</label>
-          <div class="flex gap-2">
-            <button onclick="rotateCurrent(-90)" class="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-medium rounded-lg flex items-center justify-center gap-1.5 border border-slate-700">
-              <i data-lucide="rotate-ccw" class="w-4 h-4"></i> Kiri
-            </button>
-            <button onclick="rotateCurrent(90)" class="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-medium rounded-lg flex items-center justify-center gap-1.5 border border-slate-700">
-              <i data-lucide="rotate-cw" class="w-4 h-4"></i> Kanan
-            </button>
-          </div>
-        </div>
-
-        <div class="pt-3 border-t border-slate-800 flex gap-2">
-          <button onclick="applyFilterToAll()" class="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg border border-slate-700">
-            Terapkan Filter ke Semua
-          </button>
-        </div>
-      </div>
-    </aside>
+      <div></div>
+      <button onclick="nudgeActiveCorner(0, 2)" class="p-2.5 bg-slate-800 active:bg-brand-600 rounded-xl flex items-center justify-center border border-slate-700 text-slate-200">
+        <i data-lucide="chevron-down" class="w-5 h-5"></i>
+      </button>
+      <div></div>
+    </div>
   </div>
 
+  <!-- ================= JAVASCRIPT & WEB WORKER ================= -->
   <script>
+    // ----------------------------------------------------
+    // INLINE WEB WORKER CODE (DIJALANKAN DI BACKGROUND THREAD)
+    // ----------------------------------------------------
+    const workerScript = `
+      self.onmessage = function(e) {
+        const { action, payload, id } = e.data;
+
+        if (action === 'DETECT_CORNERS') {
+          const { imgData, W, H, sw, sh } = payload;
+          const data = imgData.data;
+          const gray = new Uint8Array(sw * sh);
+          const hist = new Int32Array(256);
+
+          for (let i = 0; i < data.length; i += 4) {
+            const lum = (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) | 0;
+            gray[i / 4] = lum;
+            hist[lum]++;
+          }
+
+          let total = sw * sh, sum = 0;
+          for (let i = 0; i < 256; i++) sum += i * hist[i];
+          let sumB = 0, wB = 0, wF = 0, varMax = 0, threshold = 120;
+
+          for (let t = 0; t < 256; t++) {
+            wB += hist[t];
+            if (!wB) continue;
+            wF = total - wB;
+            if (!wF) break;
+            sumB += t * hist[t];
+            let mB = sumB / wB;
+            let mF = (sum - sumB) / wF;
+            let varBetween = wB * wF * (mB - mF) * (mB - mF);
+            if (varBetween > varMax) {
+              varMax = varBetween;
+              threshold = t;
+            }
+          }
+          threshold = Math.max(100, threshold);
+
+          const mask = new Uint8Array(sw * sh);
+          let count = 0;
+          for (let y = 1; y < sh - 1; y++) {
+            for (let x = 1; x < sw - 1; x++) {
+              const idx = y * sw + x;
+              if (gray[idx] >= threshold) {
+                mask[idx] = 1;
+                count++;
+              }
+            }
+          }
+
+          if (count < (sw * sh) * 0.1) {
+            self.postMessage({
+              action, id,
+              corners: [
+                { x: W * 0.06, y: H * 0.06 },
+                { x: W * 0.94, y: H * 0.06 },
+                { x: W * 0.94, y: H * 0.94 },
+                { x: W * 0.06, y: H * 0.94 }
+              ]
+            });
+            return;
+          }
+
+          const topPts = [], botPts = [], leftPts = [], rightPts = [];
+          for (let x = 10; x < sw - 10; x += 2) {
+            for (let y = 5; y < sh - 5; y++) {
+              if (mask[y * sw + x] === 1) { topPts.push({ x, y }); break; }
+            }
+            for (let y = sh - 6; y >= 5; y--) {
+              if (mask[y * sw + x] === 1) { botPts.push({ x, y }); break; }
+            }
+          }
+          for (let y = 10; y < sh - 10; y += 2) {
+            for (let x = 5; x < sw - 5; x++) {
+              if (mask[y * sw + x] === 1) { leftPts.push({ x, y }); break; }
+            }
+            for (let x = sw - 6; x >= 5; x--) {
+              if (mask[y * sw + x] === 1) { rightPts.push({ x, y }); break; }
+            }
+          }
+
+          function fitLineY(pts) {
+            if (pts.length < 2) return { m: 0, c: 0 };
+            let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0, n = pts.length;
+            for (let p of pts) { sumX += p.x; sumY += p.y; sumXY += p.x * p.y; sumX2 += p.x * p.x; }
+            const m = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX || 1);
+            const c = (sumY - m * sumX) / n;
+            return { m, c };
+          }
+
+          function fitLineX(pts) {
+            if (pts.length < 2) return { m: 0, c: 0 };
+            let sumX = 0, sumY = 0, sumXY = 0, sumY2 = 0, n = pts.length;
+            for (let p of pts) { sumX += p.x; sumY += p.y; sumXY += p.x * p.y; sumY2 += p.y * p.y; }
+            const m = (n * sumXY - sumX * sumY) / (n * sumY2 - sumY * sumY || 1);
+            const c = (sumX - m * sumY) / n;
+            return { m, c };
+          }
+
+          function intersect(lH, lV) {
+            const y = (lH.m * lV.c + lH.c) / (1 - lH.m * lV.m || 1);
+            const x = lV.m * y + lV.c;
+            return { x, y };
+          }
+
+          const scaleX = W / sw;
+          const scaleY = H / sh;
+          const ptTL = intersect(fitLineY(topPts), fitLineX(leftPts));
+          const ptTR = intersect(fitLineY(topPts), fitLineX(rightPts));
+          const ptBR = intersect(fitLineY(botPts), fitLineX(rightPts));
+          const ptBL = intersect(fitLineY(botPts), fitLineX(leftPts));
+
+          self.postMessage({
+            action, id,
+            corners: [
+              { x: Math.max(0, Math.min(W, ptTL.x * scaleX)), y: Math.max(0, Math.min(H, ptTL.y * scaleY)) },
+              { x: Math.max(0, Math.min(W, ptTR.x * scaleX)), y: Math.max(0, Math.min(H, ptTR.y * scaleY)) },
+              { x: Math.max(0, Math.min(W, ptBR.x * scaleX)), y: Math.max(0, Math.min(H, ptBR.y * scaleY)) },
+              { x: Math.max(0, Math.min(W, ptBL.x * scaleX)), y: Math.max(0, Math.min(H, ptBL.y * scaleY)) }
+            ]
+          });
+        }
+
+        if (action === 'WARP_PERSPECTIVE') {
+          const { srcData, srcW, srcH, pts, dstW, dstH } = payload;
+          const dstData = new Uint8ClampedArray(dstW * dstH * 4);
+          const p0 = pts[0], p1 = pts[1], p2 = pts[2], p3 = pts[3];
+
+          for (let y = 0; y < dstH; y++) {
+            const v = y / dstH;
+            for (let x = 0; x < dstW; x++) {
+              const u = x / dstW;
+              const sx = (1 - u) * (1 - v) * p0.x + u * (1 - v) * p1.x + u * v * p2.x + (1 - u) * v * p3.x;
+              const sy = (1 - u) * (1 - v) * p0.y + u * (1 - v) * p1.y + u * v * p2.y + (1 - u) * v * p3.y;
+              const isx = sx | 0;
+              const isy = sy | 0;
+
+              if (isx >= 0 && isx < srcW && isy >= 0 && isy < srcH) {
+                const srcIdx = (isy * srcW + isx) * 4;
+                const dstIdx = (y * dstW + x) * 4;
+                dstData[dstIdx]     = srcData[srcIdx];
+                dstData[dstIdx + 1] = srcData[srcIdx + 1];
+                dstData[dstIdx + 2] = srcData[srcIdx + 2];
+                dstData[dstIdx + 3] = 255;
+              }
+            }
+          }
+          self.postMessage({ action, id, dstData, dstW, dstH }, [dstData.buffer]);
+        }
+
+        if (action === 'FILTER') {
+          const { imgDataBuffer, length, filterType } = payload;
+          const data = new Uint8ClampedArray(imgDataBuffer);
+
+          if (filterType === 'magic') {
+            for (let i = 0; i < length; i += 4) {
+              data[i]     = Math.min(255, Math.max(0, ((data[i] - 128) * 1.45) + 155));
+              data[i + 1] = Math.min(255, Math.max(0, ((data[i + 1] - 128) * 1.45) + 155));
+              data[i + 2] = Math.min(255, Math.max(0, ((data[i + 2] - 128) * 1.45) + 155));
+            }
+          } else if (filterType === 'bw') {
+            for (let i = 0; i < length; i += 4) {
+              const avg = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+              const val = avg > 130 ? 255 : (avg < 75 ? 0 : (avg - 75) * 4.6);
+              data[i] = data[i + 1] = data[i + 2] = val;
+            }
+          } else if (filterType === 'gray') {
+            for (let i = 0; i < length; i += 4) {
+              const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+              data[i] = data[i + 1] = data[i + 2] = gray;
+            }
+          }
+
+          self.postMessage({ action, id, filteredBuffer: data.buffer }, [data.buffer]);
+        }
+      };
+    `;
+
+    // Inisialisasi Web Worker dari Blob
+    const workerBlob = new Blob([workerScript], { type: 'application/javascript' });
+    const scannerWorker = new Worker(URL.createObjectURL(workerBlob));
+
+    // ----------------------------------------------------
+    // MAIN APP LOGIC
+    // ----------------------------------------------------
     lucide.createIcons();
 
-    // DOM References
+    // DOM Elements
     const dropZone = document.getElementById('dropZone');
     const imageUpload = document.getElementById('imageUpload');
-    const pageSidebar = document.getElementById('pageSidebar');
-    const thumbList = document.getElementById('thumbList');
+    const thumbBar = document.getElementById('thumbBar');
     const cropStage = document.getElementById('cropStage');
     const previewStage = document.getElementById('previewStage');
-    const controlPanel = document.getElementById('controlPanel');
-    const cropControls = document.getElementById('cropControls');
-    const filterControls = document.getElementById('filterControls');
+    const bottomControls = document.getElementById('bottomControls');
+    const cropDock = document.getElementById('cropDock');
+    const filterDock = document.getElementById('filterDock');
     const magnifier = document.getElementById('magnifier');
-    const pageCountBadge = document.getElementById('pageCountBadge');
-    const pdfBtnLabel = document.getElementById('pdfBtnLabel');
+    const pageBadge = document.getElementById('pageBadge');
+    const pdfBtnText = document.getElementById('pdfBtnText');
     const activeCornerLabel = document.getElementById('activeCornerLabel');
-    const currentEditingPageTitle = document.getElementById('currentEditingPageTitle');
+    const dpadModal = document.getElementById('dpadModal');
+    const loadingOverlay = document.getElementById('loadingOverlay');
 
     const btnAutoDetect = document.getElementById('btnAutoDetect');
     const btnFullArea = document.getElementById('btnFullArea');
@@ -286,62 +475,110 @@
     const resultCanvas = document.getElementById('resultCanvas');
     const resultCtx = resultCanvas.getContext('2d');
 
-    // Multi-Page State
-    let pages = []; 
-    // Format page: { id, file, rawImage, corners, selectedCornerIndex, filter, rotation, isWarped, warpedCanvas }
+    // App State
+    let pages = [];
     let currentPageIndex = 0;
     let activePointIndex = -1;
     const cornerNames = ["Pojok Kiri Atas", "Pojok Kanan Atas", "Pojok Kanan Bawah", "Pojok Kiri Bawah"];
 
-    // 1. MULTI-FILE UPLOAD & HANDLING
+    // Worker Event Listener
+    scannerWorker.onmessage = function(e) {
+      const { action, id, corners, dstData, dstW, dstH, filteredBuffer } = e.data;
+      const targetPage = pages.find(p => p.id === id);
+      if (!targetPage) return;
+
+      if (action === 'DETECT_CORNERS') {
+        targetPage.corners = corners;
+        hideLoading();
+        if (pages[currentPageIndex].id === id) {
+          renderCropOverlay();
+        }
+      }
+
+      if (action === 'WARP_PERSPECTIVE') {
+        targetPage.warpedCanvas.width = dstW;
+        targetPage.warpedCanvas.height = dstH;
+        const wCtx = targetPage.warpedCanvas.getContext('2d');
+        const imgData = wCtx.createImageData(dstW, dstH);
+        imgData.data.set(new Uint8ClampedArray(dstData));
+        wCtx.putImageData(imgData, 0, 0);
+        targetPage.isWarped = true;
+
+        applyFilterWorker(targetPage);
+      }
+
+      if (action === 'FILTER') {
+        hideLoading();
+        targetPage.finalImageData = new ImageData(
+          new Uint8ClampedArray(filteredBuffer),
+          targetPage.warpedCanvas.width,
+          targetPage.warpedCanvas.height
+        );
+        if (pages[currentPageIndex].id === id) {
+          showResultStage(targetPage);
+        }
+        renderThumbnails();
+      }
+    };
+
+    function showLoading(text) {
+      document.getElementById('loadingText').innerText = text;
+      loadingOverlay.classList.remove('hidden');
+    }
+    function hideLoading() {
+      loadingOverlay.classList.add('hidden');
+    }
+
+    // 1. FILE UPLOAD & DISPATCH KE WORKER
     imageUpload.addEventListener('change', (e) => {
-      if (e.target.files.length) handleMultipleFiles(Array.from(e.target.files));
+      if (e.target.files.length) processFiles(Array.from(e.target.files));
     });
 
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(ev => {
       dropZone.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); });
     });
     dropZone.addEventListener('drop', (e) => {
-      if (e.dataTransfer.files.length) handleMultipleFiles(Array.from(e.dataTransfer.files));
+      if (e.dataTransfer.files.length) processFiles(Array.from(e.dataTransfer.files));
     });
 
-    function handleMultipleFiles(files) {
+    function processFiles(files) {
       const validFiles = files.filter(f => f.type.startsWith('image/'));
       if (!validFiles.length) return;
 
-      let loadedCount = 0;
+      showLoading("Menganalisis sudut dokumen...");
+      let loaded = 0;
+
       validFiles.forEach((file) => {
         const reader = new FileReader();
         reader.onload = (e) => {
           const img = new Image();
           img.onload = () => {
             const pageObj = {
-              id: Date.now() + Math.random(),
-              file: file,
+              id: 'page_' + Math.random().toString(36).substr(2, 9),
               rawImage: img,
               corners: [],
               selectedCornerIndex: 0,
               filter: 'magic',
               rotation: 0,
               isWarped: false,
-              warpedCanvas: document.createElement('canvas')
+              warpedCanvas: document.createElement('canvas'),
+              finalImageData: null
             };
 
-            // Hitung sudut otomatis
-            detectDocumentCornersUltra(pageObj);
+            // Kirim ke Web Worker untuk deteksi sudut
+            dispatchCornerDetection(pageObj);
 
             pages.push(pageObj);
-            loadedCount++;
+            loaded++;
 
-            if (loadedCount === validFiles.length) {
+            if (loaded === validFiles.length) {
               dropZone.classList.add('hidden');
-              pageSidebar.classList.remove('hidden');
-              controlPanel.classList.remove('hidden');
+              thumbBar.classList.remove('hidden');
+              bottomControls.classList.remove('hidden');
               btnExportPDF.disabled = false;
               
-              selectPage(pages.length - validFiles.length); // pilih page pertama dari batch baru
-              renderThumbnails();
-              updatePageCount();
+              selectPage(pages.length - validFiles.length);
+              updateUIHeader();
             }
           };
           img.src = e.target.result;
@@ -351,194 +588,97 @@
       imageUpload.value = '';
     }
 
-    function updatePageCount() {
-      pageCountBadge.innerText = `${pages.length} Halaman`;
-      pdfBtnLabel.innerText = `Export PDF (${pages.length})`;
-    }
-
-    // 2. ULTRA PRECISION LINE-INTERSECTION ALGORITHM
-    function detectDocumentCornersUltra(pageObj) {
+    function dispatchCornerDetection(pageObj) {
       const img = pageObj.rawImage;
-      const W = img.width;
-      const H = img.height;
-
-      const sw = 240;
-      const sh = Math.round((H / W) * 240);
-      const scaleX = W / sw;
-      const scaleY = H / sh;
-
+      const sw = 200;
+      const sh = Math.round((img.height / img.width) * 200);
       const tCanvas = document.createElement('canvas');
       tCanvas.width = sw;
       tCanvas.height = sh;
       const tCtx = tCanvas.getContext('2d');
       tCtx.drawImage(img, 0, 0, sw, sh);
-
       const imgData = tCtx.getImageData(0, 0, sw, sh);
-      const data = imgData.data;
 
-      const gray = new Uint8Array(sw * sh);
-      const hist = new Int32Array(256);
-
-      for (let i = 0; i < data.length; i += 4) {
-        const lum = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
-        gray[i / 4] = lum;
-        hist[lum]++;
-      }
-
-      let total = sw * sh;
-      let sum = 0;
-      for (let i = 0; i < 256; i++) sum += i * hist[i];
-
-      let sumB = 0, wB = 0, wF = 0, varMax = 0, threshold = 120;
-      for (let t = 0; t < 256; t++) {
-        wB += hist[t];
-        if (wB === 0) continue;
-        wF = total - wB;
-        if (wF === 0) break;
-        sumB += t * hist[t];
-        let mB = sumB / wB;
-        let mF = (sum - sumB) / wF;
-        let varBetween = wB * wF * (mB - mF) * (mB - mF);
-        if (varBetween > varMax) {
-          varMax = varBetween;
-          threshold = t;
-        }
-      }
-      threshold = Math.max(100, threshold);
-
-      const mask = new Uint8Array(sw * sh);
-      let count = 0;
-      for (let y = 1; y < sh - 1; y++) {
-        for (let x = 1; x < sw - 1; x++) {
-          const idx = y * sw + x;
-          if (gray[idx] >= threshold) {
-            mask[idx] = 1;
-            count++;
-          }
-        }
-      }
-
-      if (count < (sw * sh) * 0.1) {
-        pageObj.corners = [
-          { x: W * 0.06, y: H * 0.06 },
-          { x: W * 0.94, y: H * 0.06 },
-          { x: W * 0.94, y: H * 0.94 },
-          { x: W * 0.06, y: H * 0.94 }
-        ];
-        return;
-      }
-
-      const topPts = [], botPts = [], leftPts = [], rightPts = [];
-      for (let x = 10; x < sw - 10; x += 2) {
-        for (let y = 5; y < sh - 5; y++) {
-          if (mask[y * sw + x] === 1) { topPts.push({ x, y }); break; }
-        }
-        for (let y = sh - 6; y >= 5; y--) {
-          if (mask[y * sw + x] === 1) { botPts.push({ x, y }); break; }
-        }
-      }
-      for (let y = 10; y < sh - 10; y += 2) {
-        for (let x = 5; x < sw - 5; x++) {
-          if (mask[y * sw + x] === 1) { leftPts.push({ x, y }); break; }
-        }
-        for (let x = sw - 6; x >= 5; x--) {
-          if (mask[y * sw + x] === 1) { rightPts.push({ x, y }); break; }
-        }
-      }
-
-      const lineTop = fitLineY(topPts);
-      const lineBot = fitLineY(botPts);
-      const lineLeft = fitLineX(leftPts);
-      const lineRight = fitLineX(rightPts);
-
-      const ptTL = intersect(lineTop, lineLeft);
-      const ptTR = intersect(lineTop, lineRight);
-      const ptBR = intersect(lineBot, lineRight);
-      const ptBL = intersect(lineBot, lineLeft);
-
-      pageObj.corners = [
-        { x: Math.max(0, Math.min(W, ptTL.x * scaleX)), y: Math.max(0, Math.min(H, ptTL.y * scaleY)) },
-        { x: Math.max(0, Math.min(W, ptTR.x * scaleX)), y: Math.max(0, Math.min(H, ptTR.y * scaleY)) },
-        { x: Math.max(0, Math.min(W, ptBR.x * scaleX)), y: Math.max(0, Math.min(H, ptBR.y * scaleY)) },
-        { x: Math.max(0, Math.min(W, ptBL.x * scaleX)), y: Math.max(0, Math.min(H, ptBL.y * scaleY)) }
-      ];
+      scannerWorker.postMessage({
+        action: 'DETECT_CORNERS',
+        id: pageObj.id,
+        payload: { imgData, W: img.width, H: img.height, sw, sh }
+      });
     }
 
-    function fitLineY(pts) {
-      if (pts.length < 2) return { m: 0, c: 0 };
-      let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0, n = pts.length;
-      for (let p of pts) {
-        sumX += p.x; sumY += p.y;
-        sumXY += p.x * p.y; sumX2 += p.x * p.x;
-      }
-      const m = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX || 1);
-      const c = (sumY - m * sumX) / n;
-      return { m, c };
+    function updateUIHeader() {
+      pdfBtnText.innerText = `PDF (${pages.length})`;
+      pageBadge.innerText = `Hal ${currentPageIndex + 1}/${pages.length}`;
     }
 
-    function fitLineX(pts) {
-      if (pts.length < 2) return { m: 0, c: 0 };
-      let sumX = 0, sumY = 0, sumXY = 0, sumY2 = 0, n = pts.length;
-      for (let p of pts) {
-        sumX += p.x; sumY += p.y;
-        sumXY += p.x * p.y; sumY2 += p.y * p.y;
-      }
-      const m = (n * sumXY - sumX * sumY) / (n * sumY2 - sumY * sumY || 1);
-      const c = (sumX - m * sumY) / n;
-      return { m, c };
-    }
-
-    function intersect(lineH, lineV) {
-      const y = (lineH.m * lineV.c + lineH.c) / (1 - lineH.m * lineV.m || 1);
-      const x = lineV.m * y + lineV.c;
-      return { x, y };
-    }
-
-    // 3. PAGE SELECTION & RENDERING
+    // 2. PAGE NAVIGATION & STAGE SWITCHING
     function selectPage(idx) {
       if (idx < 0 || idx >= pages.length) return;
       currentPageIndex = idx;
       const curPage = pages[currentPageIndex];
 
-      currentEditingPageTitle.innerText = `Halaman ${currentPageIndex + 1}`;
+      updateUIHeader();
       activeCornerLabel.innerText = cornerNames[curPage.selectedCornerIndex];
 
-      if (curPage.isWarped) {
-        cropStage.classList.add('hidden');
-        previewStage.classList.remove('hidden');
-        cropControls.classList.add('hidden');
-        filterControls.classList.remove('hidden');
-        renderFinalPageResult(curPage);
+      if (curPage.isWarped && curPage.finalImageData) {
+        showResultStage(curPage);
       } else {
-        cropStage.classList.remove('hidden');
-        previewStage.classList.add('hidden');
-        cropControls.classList.remove('hidden');
-        filterControls.classList.add('hidden');
-
-        cropCanvas.width = curPage.rawImage.width;
-        cropCanvas.height = curPage.rawImage.height;
-        renderCropOverlay();
-        attachCanvasEvents();
+        showCropStage(curPage);
       }
 
       renderThumbnails();
     }
 
+    function showCropStage(curPage) {
+      cropStage.classList.remove('hidden');
+      previewStage.classList.add('hidden');
+      cropDock.classList.remove('hidden');
+      filterDock.classList.add('hidden');
+
+      cropCanvas.width = curPage.rawImage.width;
+      cropCanvas.height = curPage.rawImage.height;
+
+      renderCropOverlay();
+      attachCanvasEvents();
+    }
+
+    function showResultStage(curPage) {
+      cropStage.classList.add('hidden');
+      previewStage.classList.remove('hidden');
+      cropDock.classList.add('hidden');
+      filterDock.classList.remove('hidden');
+
+      document.querySelectorAll('.filter-btn').forEach(b => {
+        if (b.dataset.filter === curPage.filter) {
+          b.classList.add('border-brand-500');
+          b.classList.remove('border-slate-700');
+        } else {
+          b.classList.remove('border-brand-500');
+          b.classList.add('border-slate-700');
+        }
+      });
+
+      resultCanvas.width = curPage.warpedCanvas.width;
+      resultCanvas.height = curPage.warpedCanvas.height;
+      if (curPage.finalImageData) {
+        resultCtx.putImageData(curPage.finalImageData, 0, 0);
+      }
+    }
+
     function renderThumbnails() {
-      thumbList.innerHTML = '';
+      thumbBar.innerHTML = '';
       pages.forEach((p, i) => {
         const isActive = (i === currentPageIndex);
         const card = document.createElement('div');
-        card.className = `cursor-pointer p-1.5 rounded-xl border transition flex flex-col items-center gap-1 shrink-0 ${
-          isActive ? 'border-brand-500 bg-brand-500/10' : 'border-slate-800 bg-slate-900/60 hover:border-slate-700'
+        card.className = `cursor-pointer p-1 rounded-xl border transition flex flex-col items-center gap-1 shrink-0 ${
+          isActive ? 'border-brand-500 bg-brand-500/10' : 'border-slate-800 bg-slate-900/60'
         }`;
         card.onclick = () => selectPage(i);
 
-        // Thumbnail Canvas
         const thumbCanvas = document.createElement('canvas');
-        thumbCanvas.width = 80;
-        thumbCanvas.height = 100;
-        thumbCanvas.className = "w-16 h-20 sm:w-20 sm:h-24 object-contain rounded bg-slate-950";
+        thumbCanvas.width = 60;
+        thumbCanvas.height = 75;
+        thumbCanvas.className = "w-12 h-14 object-contain rounded bg-slate-950";
         const tCtx = thumbCanvas.getContext('2d');
         
         if (p.isWarped && p.warpedCanvas.width) {
@@ -548,12 +688,12 @@
         }
 
         const label = document.createElement('span');
-        label.className = `text-[11px] font-medium ${isActive ? 'text-brand-400 font-bold' : 'text-slate-400'}`;
+        label.className = `text-[9px] font-bold ${isActive ? 'text-brand-400' : 'text-slate-500'}`;
         label.innerText = `Hal ${i + 1}`;
 
         card.appendChild(thumbCanvas);
         card.appendChild(label);
-        thumbList.appendChild(card);
+        thumbBar.appendChild(card);
       });
       lucide.createIcons();
     }
@@ -563,8 +703,8 @@
       pages.splice(currentPageIndex, 1);
       if (pages.length === 0) {
         dropZone.classList.remove('hidden');
-        pageSidebar.classList.add('hidden');
-        controlPanel.classList.add('hidden');
+        thumbBar.classList.add('hidden');
+        bottomControls.classList.add('hidden');
         cropStage.classList.add('hidden');
         previewStage.classList.add('hidden');
         btnExportPDF.disabled = true;
@@ -572,20 +712,22 @@
         currentPageIndex = Math.max(0, currentPageIndex - 1);
         selectPage(currentPageIndex);
       }
-      updatePageCount();
+      updateUIHeader();
     }
 
-    // 4. OVERLAY & INTERACTIONS
+    // 3. CROP OVERLAY & TOUCH HANDLERS
     function renderCropOverlay() {
       const curPage = pages[currentPageIndex];
-      if (!curPage) return;
+      if (!curPage || !curPage.corners.length) return;
 
       cropCtx.clearRect(0, 0, cropCanvas.width, cropCanvas.height);
       cropCtx.drawImage(curPage.rawImage, 0, 0);
 
+      // Dark Mask
       cropCtx.fillStyle = "rgba(15, 23, 42, 0.6)";
       cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
 
+      // Polygon Highlight
       cropCtx.save();
       cropCtx.beginPath();
       cropCtx.moveTo(curPage.corners[0].x, curPage.corners[0].y);
@@ -595,19 +737,21 @@
       cropCtx.drawImage(curPage.rawImage, 0, 0);
       cropCtx.restore();
 
+      // Green Line
       cropCtx.strokeStyle = "#10b981";
-      cropCtx.lineWidth = Math.max(3, cropCanvas.width * 0.0035);
+      cropCtx.lineWidth = Math.max(3, cropCanvas.width * 0.004);
       cropCtx.beginPath();
       cropCtx.moveTo(curPage.corners[0].x, curPage.corners[0].y);
       for (let i = 1; i < 4; i++) cropCtx.lineTo(curPage.corners[i].x, curPage.corners[i].y);
       cropCtx.closePath();
       cropCtx.stroke();
 
-      const radius = Math.max(14, cropCanvas.width * 0.018);
+      // Handles
+      const radius = Math.max(14, cropCanvas.width * 0.022);
       curPage.corners.forEach((p, idx) => {
         const isSelected = (idx === curPage.selectedCornerIndex);
         cropCtx.beginPath();
-        cropCtx.arc(p.x, p.y, isSelected ? radius * 1.25 : radius, 0, 2 * Math.PI);
+        cropCtx.arc(p.x, p.y, isSelected ? radius * 1.3 : radius, 0, 2 * Math.PI);
         cropCtx.fillStyle = isSelected ? "#34d399" : "#ffffff";
         cropCtx.fill();
         cropCtx.lineWidth = 3.5;
@@ -620,38 +764,6 @@
         cropCtx.fill();
       });
     }
-
-    function selectCorner(idx) {
-      const curPage = pages[currentPageIndex];
-      curPage.selectedCornerIndex = idx;
-      activeCornerLabel.innerText = cornerNames[idx];
-      renderCropOverlay();
-    }
-
-    window.nudgeActiveCorner = function(dx, dy) {
-      const curPage = pages[currentPageIndex];
-      if (!curPage) return;
-      const idx = curPage.selectedCornerIndex;
-      curPage.corners[idx].x = Math.max(0, Math.min(cropCanvas.width, curPage.corners[idx].x + dx));
-      curPage.corners[idx].y = Math.max(0, Math.min(cropCanvas.height, curPage.corners[idx].y + dy));
-      renderCropOverlay();
-    };
-
-    btnAutoDetect.addEventListener('click', () => {
-      detectDocumentCornersUltra(pages[currentPageIndex]);
-      renderCropOverlay();
-    });
-
-    btnFullArea.addEventListener('click', () => {
-      const curPage = pages[currentPageIndex];
-      curPage.corners = [
-        { x: 0, y: 0 },
-        { x: cropCanvas.width, y: 0 },
-        { x: cropCanvas.width, y: cropCanvas.height },
-        { x: 0, y: cropCanvas.height }
-      ];
-      renderCropOverlay();
-    });
 
     function attachCanvasEvents() {
       const getCoords = (e) => {
@@ -666,11 +778,13 @@
       const start = (e) => {
         const pos = getCoords(e);
         const curPage = pages[currentPageIndex];
-        const hitDist = Math.max(45, cropCanvas.width * 0.055);
+        const hitDist = Math.max(50, cropCanvas.width * 0.07);
         activePointIndex = curPage.corners.findIndex(p => Math.hypot(p.x - pos.x, p.y - pos.y) < hitDist);
         if (activePointIndex !== -1) {
-          selectCorner(activePointIndex);
+          curPage.selectedCornerIndex = activePointIndex;
+          activeCornerLabel.innerText = cornerNames[activePointIndex];
           updateLoupe(pos);
+          renderCropOverlay();
         }
       };
 
@@ -693,8 +807,8 @@
       function updateLoupe(pos) {
         const curPage = pages[currentPageIndex];
         magnifier.style.display = 'block';
-        magnifier.style.left = `${pos.clientX - 65}px`;
-        magnifier.style.top = `${pos.clientY - 145}px`;
+        magnifier.style.left = `${pos.clientX - 55}px`;
+        magnifier.style.top = `${pos.clientY - 130}px`;
 
         const zoom = 2.5;
         magnifier.style.backgroundImage = `url(${curPage.rawImage.src})`;
@@ -703,7 +817,7 @@
         const activeCorner = curPage.corners[curPage.selectedCornerIndex];
         const screenX = (activeCorner.x / cropCanvas.width) * cropCanvas.clientWidth;
         const screenY = (activeCorner.y / cropCanvas.height) * cropCanvas.clientHeight;
-        magnifier.style.backgroundPosition = `-${screenX * zoom - 65}px -${screenY * zoom - 65}px`;
+        magnifier.style.backgroundPosition = `-${screenX * zoom - 55}px -${screenY * zoom - 55}px`;
       }
 
       cropCanvas.onmousedown = start;
@@ -715,10 +829,47 @@
       window.ontouchend = end;
     }
 
-    // 5. WARP PERSPECTIVE & FILTERS
+    // 4. D-PAD & MICRO ADJUSTMENT
+    function toggleDpadModal() {
+      dpadModal.classList.toggle('translate-y-full');
+    }
+
+    function cycleCornerSelection() {
+      const curPage = pages[currentPageIndex];
+      curPage.selectedCornerIndex = (curPage.selectedCornerIndex + 1) % 4;
+      activeCornerLabel.innerText = cornerNames[curPage.selectedCornerIndex];
+      renderCropOverlay();
+    }
+
+    window.nudgeActiveCorner = function(dx, dy) {
+      const curPage = pages[currentPageIndex];
+      if (!curPage) return;
+      const idx = curPage.selectedCornerIndex;
+      curPage.corners[idx].x = Math.max(0, Math.min(cropCanvas.width, curPage.corners[idx].x + dx));
+      curPage.corners[idx].y = Math.max(0, Math.min(cropCanvas.height, curPage.corners[idx].y + dy));
+      renderCropOverlay();
+    };
+
+    btnAutoDetect.addEventListener('click', () => {
+      showLoading("Snap Garis AI...");
+      dispatchCornerDetection(pages[currentPageIndex]);
+    });
+
+    btnFullArea.addEventListener('click', () => {
+      const curPage = pages[currentPageIndex];
+      curPage.corners = [
+        { x: 0, y: 0 },
+        { x: cropCanvas.width, y: 0 },
+        { x: cropCanvas.width, y: cropCanvas.height },
+        { x: 0, y: cropCanvas.height }
+      ];
+      renderCropOverlay();
+    });
+
+    // 5. WARP & FILTER DISPATCH KE WORKER
     btnApplyWarp.addEventListener('click', () => {
-      warpPage(pages[currentPageIndex]);
-      selectPage(currentPageIndex);
+      showLoading("Meluruskan halaman...");
+      warpPageWorker(pages[currentPageIndex]);
     });
 
     btnBackToCrop.addEventListener('click', () => {
@@ -726,12 +877,7 @@
       selectPage(currentPageIndex);
     });
 
-    window.warpAllPages = function() {
-      pages.forEach(p => warpPage(p));
-      selectPage(currentPageIndex);
-    };
-
-    function warpPage(pageObj) {
+    function warpPageWorker(pageObj) {
       const pts = pageObj.corners;
       const widthTop = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
       const widthBottom = Math.hypot(pts[2].x - pts[3].x, pts[2].y - pts[3].y);
@@ -741,10 +887,6 @@
       const dstW = Math.round(Math.max(widthTop, widthBottom));
       const dstH = Math.round(Math.max(heightLeft, heightRight));
 
-      pageObj.warpedCanvas.width = dstW;
-      pageObj.warpedCanvas.height = dstH;
-      const ctx = pageObj.warpedCanvas.getContext('2d');
-
       const sCanvas = document.createElement('canvas');
       sCanvas.width = pageObj.rawImage.width;
       sCanvas.height = pageObj.rawImage.height;
@@ -752,90 +894,50 @@
       sCtx.drawImage(pageObj.rawImage, 0, 0);
 
       const srcData = sCtx.getImageData(0, 0, sCanvas.width, sCanvas.height).data;
-      const outImgData = ctx.createImageData(dstW, dstH);
-      const dstData = outImgData.data;
 
-      const p0 = pts[0], p1 = pts[1], p2 = pts[2], p3 = pts[3];
-      const srcW = sCanvas.width, srcH = sCanvas.height;
-
-      for (let y = 0; y < dstH; y++) {
-        const v = y / dstH;
-        for (let x = 0; x < dstW; x++) {
-          const u = x / dstW;
-          const sx = (1 - u) * (1 - v) * p0.x + u * (1 - v) * p1.x + u * v * p2.x + (1 - u) * v * p3.x;
-          const sy = (1 - u) * (1 - v) * p0.y + u * (1 - v) * p1.y + u * v * p2.y + (1 - u) * v * p3.y;
-
-          const isx = Math.floor(sx);
-          const isy = Math.floor(sy);
-
-          if (isx >= 0 && isx < srcW && isy >= 0 && isy < srcH) {
-            const srcIdx = (isy * srcW + isx) * 4;
-            const dstIdx = (y * dstW + x) * 4;
-            dstData[dstIdx]     = srcData[srcIdx];
-            dstData[dstIdx + 1] = srcData[srcIdx + 1];
-            dstData[dstIdx + 2] = srcData[srcIdx + 2];
-            dstData[dstIdx + 3] = 255;
-          }
-        }
-      }
-      ctx.putImageData(outImgData, 0, 0);
-      pageObj.isWarped = true;
-    }
-
-    function renderFinalPageResult(pageObj) {
-      // Highlight filter button
-      document.querySelectorAll('.filter-btn').forEach(b => {
-        if (b.dataset.filter === pageObj.filter) {
-          b.classList.add('border-brand-500');
-          b.classList.remove('border-slate-700');
-        } else {
-          b.classList.remove('border-brand-500');
-          b.classList.add('border-slate-700');
+      scannerWorker.postMessage({
+        action: 'WARP_PERSPECTIVE',
+        id: pageObj.id,
+        payload: {
+          srcData,
+          srcW: sCanvas.width,
+          srcH: sCanvas.height,
+          pts,
+          dstW,
+          dstH
         }
       });
+    }
 
-      resultCanvas.width = pageObj.warpedCanvas.width;
-      resultCanvas.height = pageObj.warpedCanvas.height;
-      resultCtx.drawImage(pageObj.warpedCanvas, 0, 0);
+    function applyFilterWorker(pageObj) {
+      const wCtx = pageObj.warpedCanvas.getContext('2d');
+      const imgData = wCtx.getImageData(0, 0, pageObj.warpedCanvas.width, pageObj.warpedCanvas.height);
 
-      const imgData = resultCtx.getImageData(0, 0, resultCanvas.width, resultCanvas.height);
-      const data = imgData.data;
-      const len = data.length;
-
-      if (pageObj.filter === 'magic') {
-        for (let i = 0; i < len; i += 4) {
-          let r = data[i], g = data[i + 1], b = data[i + 2];
-          r = ((r - 128) * 1.45) + 155;
-          g = ((g - 128) * 1.45) + 155;
-          b = ((b - 128) * 1.45) + 155;
-          data[i]     = Math.min(255, Math.max(0, r));
-          data[i + 1] = Math.min(255, Math.max(0, g));
-          data[i + 2] = Math.min(255, Math.max(0, b));
+      scannerWorker.postMessage({
+        action: 'FILTER',
+        id: pageObj.id,
+        payload: {
+          imgDataBuffer: imgData.data.buffer,
+          length: imgData.data.length,
+          filterType: pageObj.filter
         }
-      } else if (pageObj.filter === 'bw') {
-        for (let i = 0; i < len; i += 4) {
-          const avg = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-          const val = avg > 130 ? 255 : (avg < 75 ? 0 : (avg - 75) * 4.6);
-          data[i] = data[i + 1] = data[i + 2] = val;
-        }
-      } else if (pageObj.filter === 'gray') {
-        for (let i = 0; i < len; i += 4) {
-          const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-          data[i] = data[i + 1] = data[i + 2] = gray;
-        }
-      }
-      resultCtx.putImageData(imgData, 0, 0);
+      }, [imgData.data.buffer]);
     }
 
     window.applyFilterToCurrent = function(type) {
-      pages[currentPageIndex].filter = type;
-      renderFinalPageResult(pages[currentPageIndex]);
+      const curPage = pages[currentPageIndex];
+      curPage.filter = type;
+      showLoading("Menerapkan filter...");
+      applyFilterWorker(curPage);
     };
 
     window.applyFilterToAll = function() {
       const type = pages[currentPageIndex].filter;
-      pages.forEach(p => { p.filter = type; });
-      renderFinalPageResult(pages[currentPageIndex]);
+      showLoading("Memproses semua halaman...");
+      pages.forEach(p => {
+        p.filter = type;
+        if (p.isWarped) applyFilterWorker(p);
+      });
     };
 
     window.rotateCurrent = function(deg) {
@@ -855,69 +957,49 @@
       ctx.drawImage(temp, -temp.width / 2, -temp.height / 2);
       ctx.restore();
 
-      renderFinalPageResult(curPage);
-      renderThumbnails();
+      applyFilterWorker(curPage);
     };
 
-    // 6. MULTI-PAGE PDF EXPORT
+    // 6. MULTI-PAGE PDF GENERATOR
     btnExportPDF.addEventListener('click', () => {
       if (!pages.length) return;
+      showLoading("Menyusun Berkas PDF...");
 
-      const { jsPDF } = window.jspdf;
-      let pdf = null;
+      setTimeout(() => {
+        const { jsPDF } = window.jspdf;
+        let pdf = null;
 
-      // Pastikan semua halaman sudah di-warp & di-filter
-      pages.forEach((page, index) => {
-        if (!page.isWarped) warpPage(page);
+        pages.forEach((page, index) => {
+          const canvas = document.createElement('canvas');
+          canvas.width = page.warpedCanvas.width;
+          canvas.height = page.warpedCanvas.height;
+          const ctx = canvas.getContext('2d');
 
-        // Render buffer canvas
-        const bufferCanvas = document.createElement('canvas');
-        bufferCanvas.width = page.warpedCanvas.width;
-        bufferCanvas.height = page.warpedCanvas.height;
-        const bCtx = bufferCanvas.getContext('2d');
-        bCtx.drawImage(page.warpedCanvas, 0, 0);
-
-        // Terapkan filter ke buffer
-        const imgData = bCtx.getImageData(0, 0, bufferCanvas.width, bufferCanvas.height);
-        const data = imgData.data;
-        const len = data.length;
-
-        if (page.filter === 'magic') {
-          for (let i = 0; i < len; i += 4) {
-            data[i]     = Math.min(255, Math.max(0, ((data[i] - 128) * 1.45) + 155));
-            data[i + 1] = Math.min(255, Math.max(0, ((data[i + 1] - 128) * 1.45) + 155));
-            data[i + 2] = Math.min(255, Math.max(0, ((data[i + 2] - 128) * 1.45) + 155));
+          if (page.finalImageData) {
+            ctx.putImageData(page.finalImageData, 0, 0);
+          } else {
+            ctx.drawImage(page.rawImage, 0, 0);
           }
-        } else if (page.filter === 'bw') {
-          for (let i = 0; i < len; i += 4) {
-            const avg = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-            data[i] = data[i + 1] = data[i + 2] = avg > 130 ? 255 : (avg < 75 ? 0 : (avg - 75) * 4.6);
+
+          const isLandscape = canvas.width > canvas.height;
+          const orientation = isLandscape ? 'l' : 'p';
+
+          if (index === 0) {
+            pdf = new jsPDF({
+              orientation: orientation,
+              unit: 'px',
+              format: [canvas.width, canvas.height]
+            });
+          } else {
+            pdf.addPage([canvas.width, canvas.height], orientation);
           }
-        } else if (page.filter === 'gray') {
-          for (let i = 0; i < len; i += 4) {
-            const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-            data[i] = data[i + 1] = data[i + 2] = gray;
-          }
-        }
-        bCtx.putImageData(imgData, 0, 0);
 
-        const isLandscape = bufferCanvas.width > bufferCanvas.height;
-        const orientation = isLandscape ? 'l' : 'p';
+          pdf.addImage(canvas.toDataURL('image/jpeg', 0.90), 'JPEG', 0, 0, canvas.width, canvas.height);
+        });
 
-        if (index === 0) {
-          pdf = new jsPDF({
-            orientation: orientation,
-            unit: 'px',
-            format: [bufferCanvas.width, bufferCanvas.height]
-          });
-        } else {
-          pdf.addPage([bufferCanvas.width, bufferCanvas.height], orientation);
-        }
-
-        pdf.addImage(bufferCanvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, bufferCanvas.width, bufferCanvas.height);
-      });
-
-      pdf.save(`DocuScan_${pages.length}_Halaman_${Date.now()}.pdf`);
+        pdf.save(`DocuScan_${pages.length}_Hal_${Date.now()}.pdf`);
+        hideLoading();
+      }, 100);
     });
   </script>
 </body>
