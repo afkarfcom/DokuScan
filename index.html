@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>DocuScan Pro - Batch Scanner</title>
+  <title>DocuScan Pro Mobile</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- jsPDF -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-
+  
   <script>
     tailwind.config = {
       darkMode: 'class',
@@ -23,31 +23,30 @@
       }
     }
   </script>
-
   <style>
+    /* Prevent pull-to-refresh & rubber-banding on mobile */
     html, body {
       height: 100%;
       height: 100dvh;
-      margin: 0;
-      padding: 0;
       overflow: hidden;
       touch-action: manipulation;
-      -webkit-user-select: none;
+    }
+    .canvas-container {
+      touch-action: none;
       user-select: none;
     }
-    .canvas-container { touch-action: none; }
-    /* Magnifier Loupe */
+    /* Loupe Zoom */
     #magnifier {
       pointer-events: none;
-      position: fixed;
-      width: 110px;
-      height: 110px;
+      position: absolute;
+      width: 120px;
+      height: 120px;
       border-radius: 50%;
       border: 3px solid #10b981;
-      box-shadow: 0 12px 30px rgba(0,0,0,0.8), 0 0 15px rgba(16,185,129,0.5);
+      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.8), 0 0 15px rgba(16,185,129,0.5);
       background-repeat: no-repeat;
       display: none;
-      z-index: 9999;
+      z-index: 50;
     }
     #magnifier::after {
       content: '';
@@ -59,433 +58,201 @@
       border-radius: 50%;
       box-shadow: 0 0 0 2px white;
     }
+    /* Hide scrollbars for clean UI */
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100 flex flex-col h-[100dvh] w-screen overflow-hidden font-sans select-none">
 
-  <!-- 1. COMPACT TOP APP BAR -->
-  <header class="h-14 bg-slate-900/95 backdrop-blur border-b border-slate-800 px-3 flex items-center justify-between shrink-0 z-30">
+  <!-- TOP MOBILE HEADER -->
+  <header class="h-14 bg-slate-900/90 backdrop-blur border-b border-slate-800 px-3 flex items-center justify-between shrink-0 z-30">
     <div class="flex items-center space-x-2">
-      <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-brand-600 to-emerald-400 flex items-center justify-center shadow-md">
-        <i data-lucide="layers" class="w-4 h-4 text-white"></i>
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-brand-600 to-emerald-400 flex items-center justify-center shadow-md shadow-brand-500/20">
+        <i data-lucide="scan-line" class="w-4 h-4 text-white"></i>
       </div>
-      <div>
-        <div class="flex items-center gap-1.5">
-          <h1 class="font-bold text-sm leading-none tracking-tight">DocuScan <span class="text-brand-500">Pro</span></h1>
-          <span class="text-[9px] px-1.5 py-0.5 rounded bg-brand-500/10 text-brand-400 font-mono border border-brand-500/20">Worker Multi-Core ⚡</span>
-        </div>
+      <div class="flex items-center gap-1.5">
+        <h1 class="font-bold text-sm leading-none">DocuScan</h1>
+        <span id="pageBadge" class="text-[10px] px-1.5 py-0.5 rounded bg-brand-500/20 text-brand-400 font-mono">0 Hal</span>
       </div>
     </div>
 
-    <!-- Right Header Actions -->
+    <!-- Actions -->
     <div class="flex items-center space-x-1.5">
-      <label for="imageUpload" class="cursor-pointer p-2 bg-slate-800 hover:bg-slate-700 active:scale-90 text-slate-200 rounded-lg flex items-center justify-center border border-slate-700 transition" title="Tambah Halaman">
+      <label for="imageUpload" class="cursor-pointer p-2 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs font-medium rounded-lg flex items-center gap-1 border border-slate-700">
         <i data-lucide="plus" class="w-4 h-4 text-brand-400"></i>
+        <span class="hidden sm:inline">Tambah</span>
       </label>
       <input type="file" id="imageUpload" accept="image/*" multiple class="hidden">
 
-      <button id="btnExportPDF" disabled class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 disabled:opacity-30 disabled:pointer-events-none text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-md shadow-brand-600/20 transition active:scale-95">
-        <i data-lucide="file-down" class="w-3.5 h-3.5"></i>
-        <span id="pdfBtnText">PDF</span>
+      <button id="btnExportPDF" disabled class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:hover:bg-brand-600 text-white text-xs font-medium rounded-lg flex items-center gap-1.5 shadow-md shadow-brand-600/20 active:scale-95 transition">
+        <i data-lucide="file-down" class="w-4 h-4"></i>
+        <span>PDF</span>
       </button>
     </div>
   </header>
 
-  <!-- 2. THUMBNAILS CAROUSEL -->
-  <div id="thumbBar" class="h-20 bg-slate-900/50 border-b border-slate-800/80 px-3 py-1.5 flex items-center gap-2 overflow-x-auto no-scrollbar shrink-0 hidden z-20">
-    <!-- Diisi otomatis lewat JS -->
-  </div>
+  <!-- MAIN APP CONTAINER -->
+  <div class="flex-1 flex flex-col overflow-hidden relative">
 
-  <!-- 3. MAIN WORKSPACE -->
-  <main class="flex-1 bg-slate-950 relative flex items-center justify-center overflow-hidden p-2 sm:p-4">
-    <div id="magnifier"></div>
-
-    <!-- Spinner Loading Overlay -->
-    <div id="loadingOverlay" class="absolute inset-0 z-40 bg-slate-950/85 backdrop-blur-sm flex flex-col items-center justify-center hidden">
-      <div class="w-10 h-10 border-4 border-brand-500 border-t-transparent rounded-full animate-spin mb-3"></div>
-      <p id="loadingText" class="text-xs font-semibold text-slate-200 text-center px-4">Memproses di Background Thread...</p>
-      <span id="loadingSubtext" class="text-[10px] text-slate-400 mt-1">Multi-Threading Active</span>
-    </div>
-
-    <!-- EMPTY STATE -->
-    <div id="dropZone" class="absolute inset-0 z-30 bg-slate-950 flex flex-col items-center justify-center p-6 text-center">
-      <div class="max-w-xs w-full p-6 rounded-2xl border-2 border-dashed border-slate-700 bg-slate-900/40 flex flex-col items-center cursor-pointer active:scale-95 transition" onclick="document.getElementById('imageUpload').click()">
-        <div class="w-14 h-14 rounded-full bg-slate-800 text-brand-400 flex items-center justify-center mb-3">
-          <i data-lucide="camera" class="w-7 h-7"></i>
+    <!-- UPLOAD PLACEHOLDER -->
+    <div id="dropZone" class="absolute inset-0 z-40 bg-slate-950 flex flex-col items-center justify-center p-4 text-center">
+      <div class="max-w-sm w-full p-6 rounded-2xl border-2 border-dashed border-slate-800 bg-slate-900/50 flex flex-col items-center active:scale-98 transition" onclick="document.getElementById('imageUpload').click()">
+        <div class="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mb-3 text-brand-400">
+          <i data-lucide="upload-cloud" class="w-8 h-8"></i>
         </div>
-        <h2 class="text-sm font-semibold text-slate-200 mb-1">Pindai Dokumen</h2>
-        <p class="text-xs text-slate-400 mb-4">Pilih 1 atau banyak foto sekaligus</p>
-        <button class="w-full py-2.5 bg-brand-600 text-white text-xs font-semibold rounded-xl shadow-lg shadow-brand-600/30 flex items-center justify-center gap-2">
-          <i data-lucide="plus-circle" class="w-4 h-4"></i>
-          <span>Pilih Foto</span>
+        <h2 class="text-base font-semibold text-slate-200 mb-1">Unggah Dokumen</h2>
+        <p class="text-xs text-slate-400 mb-5">Pilih 1 atau beberapa foto dokumen</p>
+        <button class="w-full py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-medium rounded-xl shadow flex items-center justify-center gap-2">
+          <i data-lucide="camera" class="w-4 h-4"></i>
+          <span>Buka Galeri / Kamera</span>
         </button>
       </div>
     </div>
 
-    <!-- CROP STAGE -->
-    <div id="cropStage" class="w-full h-full flex items-center justify-center hidden">
-      <div class="canvas-container relative max-w-full max-h-full flex items-center justify-center">
-        <canvas id="cropCanvas" class="max-w-full max-h-[calc(100dvh-320px)] sm:max-h-[calc(100dvh-260px)] object-contain rounded-lg shadow-2xl border border-slate-800"></canvas>
-      </div>
-    </div>
+    <!-- CENTER: CANVAS VIEWPORT (AUTO-FIT) -->
+    <main class="flex-1 w-full relative flex items-center justify-center p-2 overflow-hidden bg-slate-950">
+      <div id="magnifier"></div>
 
-    <!-- RESULT STAGE -->
-    <div id="previewStage" class="w-full h-full flex items-center justify-center hidden">
-      <div class="relative max-w-full max-h-full flex items-center justify-center">
-        <canvas id="resultCanvas" class="max-w-full max-h-[calc(100dvh-320px)] sm:max-h-[calc(100dvh-260px)] object-contain rounded-lg shadow-2xl bg-white"></canvas>
-      </div>
-    </div>
-  </main>
-
-  <!-- 4. BOTTOM ACTION CONTROL -->
-  <footer id="bottomControls" class="bg-slate-900/95 border-t border-slate-800 shrink-0 z-30 transition-all hidden">
-    
-    <!-- SUB-VIEW: CROP CONTROLS -->
-    <div id="cropDock" class="p-3 space-y-2.5">
-      <!-- Info Header Bar -->
-      <div class="flex items-center justify-between px-1">
-        <div class="flex items-center gap-1.5">
-          <span id="pageBadge" class="text-xs font-bold text-slate-200">Hal 1/1</span>
-          <span class="text-[10px] text-brand-400 bg-brand-500/10 px-1.5 py-0.5 rounded border border-brand-500/20">AI Line Snap</span>
-        </div>
-        
-        <div class="flex items-center gap-1">
-          <button onclick="toggleDpadModal()" class="px-2.5 py-1 bg-slate-800 active:bg-slate-700 text-[11px] text-slate-300 font-medium rounded-md border border-slate-700 flex items-center gap-1">
-            <i data-lucide="gamepad-2" class="w-3.5 h-3.5 text-brand-400"></i>
-            <span>D-Pad</span>
-          </button>
-          <button onclick="deleteCurrentPage()" class="p-1 text-rose-400 hover:text-rose-300 active:scale-90">
-            <i data-lucide="trash-2" class="w-4 h-4"></i>
-          </button>
+      <!-- Crop Canvas Stage -->
+      <div id="cropStage" class="relative w-full h-full flex items-center justify-center hidden">
+        <div class="relative max-w-full max-h-full canvas-container flex items-center justify-center">
+          <canvas id="cropCanvas" class="max-w-full max-h-[calc(100dvh-230px)] object-contain block rounded shadow-lg border border-slate-800"></canvas>
         </div>
       </div>
 
-      <!-- Quick Adjust Tools -->
-      <div class="grid grid-cols-2 gap-2">
-        <button id="btnAutoDetect" class="py-2 bg-slate-800 active:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 flex items-center justify-center gap-1.5 transition">
-          <i data-lucide="sparkles" class="w-3.5 h-3.5 text-brand-400"></i>
-          <span>Snap AI Hal Ini</span>
-        </button>
-        <button id="btnFullArea" class="py-2 bg-slate-800 active:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 flex items-center justify-center gap-1.5 transition">
-          <i data-lucide="maximize" class="w-3.5 h-3.5 text-slate-400"></i>
-          <span>Full Area</span>
-        </button>
+      <!-- Result Preview Stage -->
+      <div id="previewStage" class="relative w-full h-full flex items-center justify-center hidden">
+        <div class="relative max-w-full max-h-full flex items-center justify-center">
+          <canvas id="resultCanvas" class="max-w-full max-h-[calc(100dvh-230px)] object-contain block rounded shadow-lg border border-slate-800 bg-white"></canvas>
+        </div>
       </div>
+    </main>
 
-      <!-- MAIN ACTION BUTTONS: LURUSKAN 1 HALAMAN & LURUSKAN SEMUA -->
-      <div class="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800/80">
-        <button id="btnApplyWarp" class="py-2.5 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-100 text-xs font-bold rounded-xl border border-slate-700 flex items-center justify-center gap-1.5 transition">
-          <i data-lucide="check" class="w-4 h-4 text-emerald-400"></i>
-          <span>Luruskan 1 Hal</span>
-        </button>
+    <!-- HORIZONTAL THUMBNAIL BAR -->
+    <section id="thumbSection" class="h-16 bg-slate-900/95 border-t border-slate-800 px-3 py-1.5 flex items-center gap-2 overflow-x-auto no-scrollbar shrink-0 hidden z-20">
+      <div id="thumbList" class="flex items-center gap-2"></div>
+    </section>
 
-        <button onclick="warpAllPages()" class="py-2.5 bg-gradient-to-r from-brand-600 to-emerald-500 hover:from-brand-500 hover:to-emerald-400 text-white text-xs font-bold rounded-xl shadow-lg shadow-brand-600/30 flex items-center justify-center gap-1.5 transition active:scale-95">
-          <i data-lucide="check-check" class="w-4 h-4"></i>
-          <span id="warpAllBtnText">Luruskan Semua</span>
-        </button>
-      </div>
-    </div>
-
-    <!-- SUB-VIEW: PREVIEW & FILTER CONTROLS -->
-    <div id="filterDock" class="p-3 space-y-2.5 hidden">
-      <!-- Filter selection tabs -->
-      <div class="grid grid-cols-4 gap-1.5">
-        <button onclick="applyFilterToCurrent('magic')" class="filter-btn active py-2 bg-slate-800 rounded-lg text-center border border-brand-500 flex flex-col items-center gap-0.5" data-filter="magic">
-          <i data-lucide="wand-2" class="w-3.5 h-3.5 text-brand-400"></i>
-          <span class="text-[10px] font-medium">Magic</span>
-        </button>
-        <button onclick="applyFilterToCurrent('bw')" class="filter-btn py-2 bg-slate-800 rounded-lg text-center border border-slate-700 flex flex-col items-center gap-0.5" data-filter="bw">
-          <i data-lucide="contrast" class="w-3.5 h-3.5 text-slate-300"></i>
-          <span class="text-[10px] font-medium">B&W</span>
-        </button>
-        <button onclick="applyFilterToCurrent('gray')" class="filter-btn py-2 bg-slate-800 rounded-lg text-center border border-slate-700 flex flex-col items-center gap-0.5" data-filter="gray">
-          <i data-lucide="sun-medium" class="w-3.5 h-3.5 text-slate-300"></i>
-          <span class="text-[10px] font-medium">Gray</span>
-        </button>
-        <button onclick="applyFilterToCurrent('original')" class="filter-btn py-2 bg-slate-800 rounded-lg text-center border border-slate-700 flex flex-col items-center gap-0.5" data-filter="original">
-          <i data-lucide="image" class="w-3.5 h-3.5 text-slate-300"></i>
-          <span class="text-[10px] font-medium">Asli</span>
-        </button>
-      </div>
-
-      <!-- Action Footer -->
-      <div class="flex items-center gap-2">
-        <button id="btnBackToCrop" class="flex-1 py-2 bg-slate-800 active:bg-slate-700 text-xs font-semibold rounded-xl border border-slate-700 flex items-center justify-center gap-1.5">
-          <i data-lucide="crop" class="w-3.5 h-3.5 text-brand-400"></i>
-          <span>Atur Sudut</span>
-        </button>
-        <button onclick="rotateCurrent(90)" class="px-4 py-2 bg-slate-800 active:bg-slate-700 text-xs font-semibold rounded-xl border border-slate-700 flex items-center justify-center gap-1">
-          <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
-          <span>Putar</span>
-        </button>
-        <button onclick="applyFilterToAll()" class="px-3 py-2 bg-slate-800 active:bg-slate-700 text-[11px] font-medium rounded-xl border border-slate-700">
-          Filter Semua
-        </button>
-      </div>
-    </div>
-  </footer>
-
-  <!-- 5. D-PAD MICRO CONTROLLER (MODAL DRAWER) -->
-  <div id="dpadModal" class="fixed inset-x-0 bottom-0 z-50 bg-slate-900/95 border-t border-slate-800 p-4 rounded-t-2xl shadow-2xl backdrop-blur transform translate-y-full transition-transform duration-200">
-    <div class="flex items-center justify-between pb-2 border-b border-slate-800 mb-3">
-      <div class="flex items-center gap-2">
-        <span class="text-xs font-bold text-slate-200">Fine-Tuning Sudut</span>
-        <span id="activeCornerLabel" class="text-[10px] text-brand-400 bg-brand-500/10 px-1.5 py-0.5 rounded font-mono">Pojok Kiri Atas</span>
-      </div>
-      <button onclick="toggleDpadModal()" class="text-xs text-slate-400 hover:text-white font-bold p-1">Tutup</button>
-    </div>
-
-    <div class="grid grid-cols-3 gap-2 w-36 mx-auto">
-      <div></div>
-      <button onclick="nudgeActiveCorner(0, -2)" class="p-2.5 bg-slate-800 active:bg-brand-600 rounded-xl flex items-center justify-center border border-slate-700 text-slate-200">
-        <i data-lucide="chevron-up" class="w-5 h-5"></i>
-      </button>
-      <div></div>
+    <!-- BOTTOM CONTROL BAR -->
+    <footer id="bottomControls" class="bg-slate-900 border-t border-slate-800/80 p-3 shrink-0 z-20 hidden">
       
-      <button onclick="nudgeActiveCorner(-2, 0)" class="p-2.5 bg-slate-800 active:bg-brand-600 rounded-xl flex items-center justify-center border border-slate-700 text-slate-200">
-        <i data-lucide="chevron-left" class="w-5 h-5"></i>
-      </button>
-      <button onclick="cycleCornerSelection()" class="p-2.5 bg-brand-600/20 active:bg-brand-600 rounded-xl flex items-center justify-center border border-brand-500/50 text-brand-400">
-        <i data-lucide="refresh-cw" class="w-4 h-4"></i>
-      </button>
-      <button onclick="nudgeActiveCorner(2, 0)" class="p-2.5 bg-slate-800 active:bg-brand-600 rounded-xl flex items-center justify-center border border-slate-700 text-slate-200">
-        <i data-lucide="chevron-right" class="w-5 h-5"></i>
-      </button>
+      <!-- MODE A: CROP CONTROLS -->
+      <div id="cropControls" class="space-y-2">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-1.5 flex-1">
+            <button id="btnAutoDetect" class="flex-1 py-2 bg-slate-800 active:bg-slate-700 text-[11px] font-medium rounded-lg flex items-center justify-center gap-1 border border-slate-700">
+              <i data-lucide="sparkles" class="w-3.5 h-3.5 text-brand-400"></i>
+              <span>Snap AI</span>
+            </button>
+            <button id="btnFullArea" class="px-3 py-2 bg-slate-800 active:bg-slate-700 text-[11px] font-medium rounded-lg flex items-center justify-center gap-1 border border-slate-700">
+              <i data-lucide="maximize" class="w-3.5 h-3.5 text-slate-400"></i>
+            </button>
+            <button id="btnToggleDpad" class="px-3 py-2 bg-slate-800 active:bg-slate-700 text-[11px] font-medium rounded-lg flex items-center justify-center gap-1 border border-slate-700">
+              <i data-lucide="move" class="w-3.5 h-3.5 text-amber-400"></i>
+            </button>
+            <button onclick="deleteCurrentPage()" class="px-3 py-2 bg-rose-500/10 active:bg-rose-500/20 text-[11px] font-medium rounded-lg flex items-center justify-center text-rose-400 border border-rose-500/20">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
 
-      <div></div>
-      <button onclick="nudgeActiveCorner(0, 2)" class="p-2.5 bg-slate-800 active:bg-brand-600 rounded-xl flex items-center justify-center border border-slate-700 text-slate-200">
-        <i data-lucide="chevron-down" class="w-5 h-5"></i>
-      </button>
-      <div></div>
-    </div>
+          <button id="btnApplyWarp" class="py-2 px-4 bg-brand-600 active:bg-brand-500 text-white text-xs font-semibold rounded-lg flex items-center justify-center gap-1 shadow-md shadow-brand-600/30">
+            <span>Luruskan</span>
+            <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+
+        <!-- COLLAPSIBLE MICRO D-PAD (POPUP/DRAWER) -->
+        <div id="dpadPanel" class="p-2.5 bg-slate-950 rounded-xl border border-slate-800 hidden flex items-center justify-between">
+          <div class="text-[11px]">
+            <span class="text-slate-400 block">Fine-Tuning:</span>
+            <span id="activeCornerLabel" class="text-brand-400 font-semibold text-[10px]">Pojok Kiri Atas</span>
+          </div>
+
+          <div class="grid grid-cols-3 gap-1 w-28">
+            <div></div>
+            <button onclick="nudgeActiveCorner(0, -2)" class="p-1.5 bg-slate-800 active:bg-brand-600 rounded flex items-center justify-center text-slate-300">
+              <i data-lucide="chevron-up" class="w-3.5 h-3.5"></i>
+            </button>
+            <div></div>
+            
+            <button onclick="nudgeActiveCorner(-2, 0)" class="p-1.5 bg-slate-800 active:bg-brand-600 rounded flex items-center justify-center text-slate-300">
+              <i data-lucide="chevron-left" class="w-3.5 h-3.5"></i>
+            </button>
+            <button onclick="toggleCornerSelection()" class="p-1.5 bg-brand-600/20 text-brand-400 rounded flex items-center justify-center text-[10px] font-mono font-bold">
+              GANTI
+            </button>
+            <button onclick="nudgeActiveCorner(2, 0)" class="p-1.5 bg-slate-800 active:bg-brand-600 rounded flex items-center justify-center text-slate-300">
+              <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+            </button>
+
+            <div></div>
+            <button onclick="nudgeActiveCorner(0, 2)" class="p-1.5 bg-slate-800 active:bg-brand-600 rounded flex items-center justify-center text-slate-300">
+              <i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+            </button>
+            <div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODE B: FILTER & RESULT CONTROLS -->
+      <div id="filterControls" class="space-y-2.5 hidden">
+        <!-- Horizontal Scroll Filters -->
+        <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+          <button onclick="applyFilterToCurrent('magic')" class="filter-btn shrink-0 px-3 py-1.5 bg-slate-800 active:bg-slate-700 border border-brand-500 rounded-lg text-xs flex items-center gap-1.5" data-filter="magic">
+            <i data-lucide="wand-2" class="w-3.5 h-3.5 text-brand-400"></i>
+            <span>Magic Color</span>
+          </button>
+          <button onclick="applyFilterToCurrent('bw')" class="filter-btn shrink-0 px-3 py-1.5 bg-slate-800 active:bg-slate-700 border border-slate-700 rounded-lg text-xs flex items-center gap-1.5" data-filter="bw">
+            <i data-lucide="contrast" class="w-3.5 h-3.5 text-slate-300"></i>
+            <span>B&W Doc</span>
+          </button>
+          <button onclick="applyFilterToCurrent('gray')" class="filter-btn shrink-0 px-3 py-1.5 bg-slate-800 active:bg-slate-700 border border-slate-700 rounded-lg text-xs flex items-center gap-1.5" data-filter="gray">
+            <i data-lucide="sun-medium" class="w-3.5 h-3.5 text-slate-300"></i>
+            <span>Grayscale</span>
+          </button>
+          <button onclick="applyFilterToCurrent('original')" class="filter-btn shrink-0 px-3 py-1.5 bg-slate-800 active:bg-slate-700 border border-slate-700 rounded-lg text-xs flex items-center gap-1.5" data-filter="original">
+            <i data-lucide="image" class="w-3.5 h-3.5 text-slate-300"></i>
+            <span>Asli</span>
+          </button>
+        </div>
+
+        <div class="flex items-center justify-between gap-2 pt-1 border-t border-slate-800">
+          <div class="flex items-center gap-1">
+            <button id="btnBackToCrop" class="px-2.5 py-1.5 bg-slate-800 active:bg-slate-700 rounded-lg text-[11px] text-brand-400 border border-slate-700 flex items-center gap-1">
+              <i data-lucide="crop" class="w-3.5 h-3.5"></i> Edit Sudut
+            </button>
+            <button onclick="rotateCurrent(90)" class="px-2.5 py-1.5 bg-slate-800 active:bg-slate-700 rounded-lg text-[11px] text-slate-300 border border-slate-700 flex items-center gap-1">
+              <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> Putar
+            </button>
+          </div>
+
+          <button onclick="applyFilterToAll()" class="px-3 py-1.5 bg-slate-800 active:bg-slate-700 rounded-lg text-[11px] text-slate-300 border border-slate-700">
+            Terapkan Semua
+          </button>
+        </div>
+      </div>
+    </footer>
   </div>
 
-  <!-- ================= JAVASCRIPT & WEB WORKER ================= -->
   <script>
-    // ----------------------------------------------------
-    // INLINE WEB WORKER SCRIPT
-    // ----------------------------------------------------
-    const workerScript = `
-      self.onmessage = function(e) {
-        const { action, payload, taskId, id } = e.data;
-
-        if (action === 'DETECT_CORNERS') {
-          const { imgData, W, H, sw, sh } = payload;
-          const data = imgData.data;
-          const gray = new Uint8Array(sw * sh);
-          const hist = new Int32Array(256);
-
-          for (let i = 0; i < data.length; i += 4) {
-            const lum = (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) | 0;
-            gray[i / 4] = lum;
-            hist[lum]++;
-          }
-
-          let total = sw * sh, sum = 0;
-          for (let i = 0; i < 256; i++) sum += i * hist[i];
-          let sumB = 0, wB = 0, wF = 0, varMax = 0, threshold = 120;
-
-          for (let t = 0; t < 256; t++) {
-            wB += hist[t];
-            if (!wB) continue;
-            wF = total - wB;
-            if (!wF) break;
-            sumB += t * hist[t];
-            let mB = sumB / wB;
-            let mF = (sum - sumB) / wF;
-            let varBetween = wB * wF * (mB - mF) * (mB - mF);
-            if (varBetween > varMax) {
-              varMax = varBetween;
-              threshold = t;
-            }
-          }
-          threshold = Math.max(100, threshold);
-
-          const mask = new Uint8Array(sw * sh);
-          let count = 0;
-          for (let y = 1; y < sh - 1; y++) {
-            for (let x = 1; x < sw - 1; x++) {
-              const idx = y * sw + x;
-              if (gray[idx] >= threshold) {
-                mask[idx] = 1;
-                count++;
-              }
-            }
-          }
-
-          if (count < (sw * sh) * 0.1) {
-            self.postMessage({
-              action, taskId, id,
-              corners: [
-                { x: W * 0.06, y: H * 0.06 },
-                { x: W * 0.94, y: H * 0.06 },
-                { x: W * 0.94, y: H * 0.94 },
-                { x: W * 0.06, y: H * 0.94 }
-              ]
-            });
-            return;
-          }
-
-          const topPts = [], botPts = [], leftPts = [], rightPts = [];
-          for (let x = 10; x < sw - 10; x += 2) {
-            for (let y = 5; y < sh - 5; y++) {
-              if (mask[y * sw + x] === 1) { topPts.push({ x, y }); break; }
-            }
-            for (let y = sh - 6; y >= 5; y--) {
-              if (mask[y * sw + x] === 1) { botPts.push({ x, y }); break; }
-            }
-          }
-          for (let y = 10; y < sh - 10; y += 2) {
-            for (let x = 5; x < sw - 5; x++) {
-              if (mask[y * sw + x] === 1) { leftPts.push({ x, y }); break; }
-            }
-            for (let x = sw - 6; x >= 5; x--) {
-              if (mask[y * sw + x] === 1) { rightPts.push({ x, y }); break; }
-            }
-          }
-
-          function fitLineY(pts) {
-            if (pts.length < 2) return { m: 0, c: 0 };
-            let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0, n = pts.length;
-            for (let p of pts) { sumX += p.x; sumY += p.y; sumXY += p.x * p.y; sumX2 += p.x * p.x; }
-            const m = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX || 1);
-            const c = (sumY - m * sumX) / n;
-            return { m, c };
-          }
-
-          function fitLineX(pts) {
-            if (pts.length < 2) return { m: 0, c: 0 };
-            let sumX = 0, sumY = 0, sumXY = 0, sumY2 = 0, n = pts.length;
-            for (let p of pts) { sumX += p.x; sumY += p.y; sumXY += p.x * p.y; sumX2 += p.x * p.x; }
-            const m = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumY || 1);
-            const c = (sumX - m * sumY) / n;
-            return { m, c };
-          }
-
-          function intersect(lH, lV) {
-            const y = (lH.m * lV.c + lH.c) / (1 - lH.m * lV.m || 1);
-            const x = lV.m * y + lV.c;
-            return { x, y };
-          }
-
-          const scaleX = W / sw;
-          const scaleY = H / sh;
-          const ptTL = intersect(fitLineY(topPts), fitLineX(leftPts));
-          const ptTR = intersect(fitLineY(topPts), fitLineX(rightPts));
-          const ptBR = intersect(fitLineY(botPts), fitLineX(rightPts));
-          const ptBL = intersect(fitLineY(botPts), fitLineX(leftPts));
-
-          self.postMessage({
-            action, taskId, id,
-            corners: [
-              { x: Math.max(0, Math.min(W, ptTL.x * scaleX)), y: Math.max(0, Math.min(H, ptTL.y * scaleY)) },
-              { x: Math.max(0, Math.min(W, ptTR.x * scaleX)), y: Math.max(0, Math.min(H, ptTR.y * scaleY)) },
-              { x: Math.max(0, Math.min(W, ptBR.x * scaleX)), y: Math.max(0, Math.min(H, ptBR.y * scaleY)) },
-              { x: Math.max(0, Math.min(W, ptBL.x * scaleX)), y: Math.max(0, Math.min(H, ptBL.y * scaleY)) }
-            ]
-          });
-        }
-
-        if (action === 'WARP_PERSPECTIVE') {
-          const { srcData, srcW, srcH, pts, dstW, dstH } = payload;
-          const dstData = new Uint8ClampedArray(dstW * dstH * 4);
-          const p0 = pts[0], p1 = pts[1], p2 = pts[2], p3 = pts[3];
-
-          for (let y = 0; y < dstH; y++) {
-            const v = y / dstH;
-            for (let x = 0; x < dstW; x++) {
-              const u = x / dstW;
-              const sx = (1 - u) * (1 - v) * p0.x + u * (1 - v) * p1.x + u * v * p2.x + (1 - u) * v * p3.x;
-              const sy = (1 - u) * (1 - v) * p0.y + u * (1 - v) * p1.y + u * v * p2.y + (1 - u) * v * p3.y;
-              const isx = sx | 0;
-              const isy = sy | 0;
-
-              if (isx >= 0 && isx < srcW && isy >= 0 && isy < srcH) {
-                const srcIdx = (isy * srcW + isx) * 4;
-                const dstIdx = (y * dstW + x) * 4;
-                dstData[dstIdx]     = srcData[srcIdx];
-                dstData[dstIdx + 1] = srcData[srcIdx + 1];
-                dstData[dstIdx + 2] = srcData[srcIdx + 2];
-                dstData[dstIdx + 3] = 255;
-              }
-            }
-          }
-          self.postMessage({ action, taskId, id, dstData, dstW, dstH }, [dstData.buffer]);
-        }
-
-        if (action === 'FILTER') {
-          const { imgDataBuffer, length, filterType } = payload;
-          const data = new Uint8ClampedArray(imgDataBuffer);
-
-          if (filterType === 'magic') {
-            for (let i = 0; i < length; i += 4) {
-              data[i]     = Math.min(255, Math.max(0, ((data[i] - 128) * 1.45) + 155));
-              data[i + 1] = Math.min(255, Math.max(0, ((data[i + 1] - 128) * 1.45) + 155));
-              data[i + 2] = Math.min(255, Math.max(0, ((data[i + 2] - 128) * 1.45) + 155));
-            }
-          } else if (filterType === 'bw') {
-            for (let i = 0; i < length; i += 4) {
-              const avg = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-              const val = avg > 130 ? 255 : (avg < 75 ? 0 : (avg - 75) * 4.6);
-              data[i] = data[i + 1] = data[i + 2] = val;
-            }
-          } else if (filterType === 'gray') {
-            for (let i = 0; i < length; i += 4) {
-              const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-              data[i] = data[i + 1] = data[i + 2] = gray;
-            }
-          }
-
-          self.postMessage({ action, taskId, id, filteredBuffer: data.buffer }, [data.buffer]);
-        }
-      };
-    `;
-
-    const workerBlob = new Blob([workerScript], { type: 'application/javascript' });
-    const scannerWorker = new Worker(URL.createObjectURL(workerBlob));
-
-    // Promise Task Handler
-    const workerPromises = new Map();
-    function postWorkerTask(action, id, payload, transferables = []) {
-      const taskId = 'task_' + Math.random().toString(36).substr(2, 9);
-      return new Promise((resolve) => {
-        workerPromises.set(taskId, resolve);
-        scannerWorker.postMessage({ action, id, taskId, payload }, transferables);
-      });
-    }
-
-    scannerWorker.onmessage = function(e) {
-      const { taskId, action, id, corners, dstData, dstW, dstH, filteredBuffer } = e.data;
-      if (workerPromises.has(taskId)) {
-        const resolve = workerPromises.get(taskId);
-        workerPromises.delete(taskId);
-        resolve({ action, id, corners, dstData, dstW, dstH, filteredBuffer });
-      }
-    };
-
-    // ----------------------------------------------------
-    // MAIN APP CONTROLLER
-    // ----------------------------------------------------
     lucide.createIcons();
 
     // DOM Elements
     const dropZone = document.getElementById('dropZone');
     const imageUpload = document.getElementById('imageUpload');
-    const thumbBar = document.getElementById('thumbBar');
+    const thumbSection = document.getElementById('thumbSection');
+    const thumbList = document.getElementById('thumbList');
     const cropStage = document.getElementById('cropStage');
     const previewStage = document.getElementById('previewStage');
     const bottomControls = document.getElementById('bottomControls');
-    const cropDock = document.getElementById('cropDock');
-    const filterDock = document.getElementById('filterDock');
+    const cropControls = document.getElementById('cropControls');
+    const filterControls = document.getElementById('filterControls');
+    const dpadPanel = document.getElementById('dpadPanel');
+    const btnToggleDpad = document.getElementById('btnToggleDpad');
     const magnifier = document.getElementById('magnifier');
     const pageBadge = document.getElementById('pageBadge');
-    const pdfBtnText = document.getElementById('pdfBtnText');
-    const warpAllBtnText = document.getElementById('warpAllBtnText');
     const activeCornerLabel = document.getElementById('activeCornerLabel');
-    const dpadModal = document.getElementById('dpadModal');
-    const loadingOverlay = document.getElementById('loadingOverlay');
 
     const btnAutoDetect = document.getElementById('btnAutoDetect');
     const btnFullArea = document.getElementById('btnFullArea');
@@ -498,174 +265,249 @@
     const resultCanvas = document.getElementById('resultCanvas');
     const resultCtx = resultCanvas.getContext('2d');
 
+    // App State
     let pages = [];
     let currentPageIndex = 0;
     let activePointIndex = -1;
-    const cornerNames = ["Pojok Kiri Atas", "Pojok Kanan Atas", "Pojok Kanan Bawah", "Pojok Kiri Bawah"];
+    const cornerNames = ["Kiri Atas", "Kanan Atas", "Kanan Bawah", "Kiri Bawah"];
 
-    function showLoading(text) {
-      document.getElementById('loadingText').innerText = text;
-      loadingOverlay.classList.remove('hidden');
-    }
-    function hideLoading() {
-      loadingOverlay.classList.add('hidden');
-    }
-
-    // 1. FILE UPLOAD
+    // 1. FILE UPLOAD HANDLER
     imageUpload.addEventListener('change', (e) => {
-      if (e.target.files.length) processFiles(Array.from(e.target.files));
+      if (e.target.files.length) handleFiles(Array.from(e.target.files));
     });
 
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(ev => {
       dropZone.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); });
     });
     dropZone.addEventListener('drop', (e) => {
-      if (e.dataTransfer.files.length) processFiles(Array.from(e.dataTransfer.files));
+      if (e.dataTransfer.files.length) handleFiles(Array.from(e.dataTransfer.files));
     });
 
-    async function processFiles(files) {
+    function handleFiles(files) {
       const validFiles = files.filter(f => f.type.startsWith('image/'));
       if (!validFiles.length) return;
 
-      showLoading("Menganalisis sudut dokumen...");
-      const initialIdx = pages.length;
-
-      for (let i = 0; i < validFiles.length; i++) {
-        const file = validFiles[i];
-        const img = await loadImageFromFile(file);
-
-        const pageObj = {
-          id: 'page_' + Math.random().toString(36).substr(2, 9),
-          rawImage: img,
-          corners: [],
-          selectedCornerIndex: 0,
-          filter: 'magic',
-          rotation: 0,
-          isWarped: false,
-          warpedCanvas: document.createElement('canvas'),
-          finalImageData: null
-        };
-
-        // Deteksi sudut via worker
-        const corners = await detectCornersAsync(pageObj);
-        pageObj.corners = corners;
-        pages.push(pageObj);
-      }
-
-      hideLoading();
-      dropZone.classList.add('hidden');
-      thumbBar.classList.remove('hidden');
-      bottomControls.classList.remove('hidden');
-      btnExportPDF.disabled = false;
-      
-      selectPage(initialIdx);
-      updateUIHeader();
-      imageUpload.value = '';
-    }
-
-    function loadImageFromFile(file) {
-      return new Promise((resolve) => {
+      let loaded = 0;
+      validFiles.forEach((file) => {
         const reader = new FileReader();
         reader.onload = (e) => {
           const img = new Image();
-          img.onload = () => resolve(img);
+          img.onload = () => {
+            const pageObj = {
+              id: Date.now() + Math.random(),
+              rawImage: img,
+              corners: [],
+              selectedCornerIndex: 0,
+              filter: 'magic',
+              rotation: 0,
+              isWarped: false,
+              warpedCanvas: document.createElement('canvas')
+            };
+
+            // Jalankan deteksi garis presisi
+            detectDocumentCornersUltra(pageObj);
+
+            pages.push(pageObj);
+            loaded++;
+
+            if (loaded === validFiles.length) {
+              dropZone.classList.add('hidden');
+              thumbSection.classList.remove('hidden');
+              bottomControls.classList.remove('hidden');
+              btnExportPDF.disabled = false;
+              
+              selectPage(pages.length - validFiles.length);
+              renderThumbnails();
+              updatePageBadge();
+            }
+          };
           img.src = e.target.result;
         };
         reader.readAsDataURL(file);
       });
+      imageUpload.value = '';
     }
 
-    async function detectCornersAsync(pageObj) {
+    function updatePageBadge() {
+      pageBadge.innerText = `${currentPageIndex + 1}/${pages.length} Hal`;
+    }
+
+    // 2. LINE-INTERSECTION DETECTION
+    function detectDocumentCornersUltra(pageObj) {
       const img = pageObj.rawImage;
-      const sw = 200;
-      const sh = Math.round((img.height / img.width) * 200);
+      const W = img.width;
+      const H = img.height;
+
+      const sw = 220;
+      const sh = Math.round((H / W) * 220);
+      const scaleX = W / sw;
+      const scaleY = H / sh;
+
       const tCanvas = document.createElement('canvas');
       tCanvas.width = sw;
       tCanvas.height = sh;
       const tCtx = tCanvas.getContext('2d');
       tCtx.drawImage(img, 0, 0, sw, sh);
+
       const imgData = tCtx.getImageData(0, 0, sw, sh);
+      const data = imgData.data;
 
-      const res = await postWorkerTask('DETECT_CORNERS', pageObj.id, {
-        imgData, W: img.width, H: img.height, sw, sh
-      });
-      return res.corners;
+      const gray = new Uint8Array(sw * sh);
+      const hist = new Int32Array(256);
+
+      for (let i = 0; i < data.length; i += 4) {
+        const lum = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+        gray[i / 4] = lum;
+        hist[lum]++;
+      }
+
+      let total = sw * sh;
+      let sum = 0;
+      for (let i = 0; i < 256; i++) sum += i * hist[i];
+
+      let sumB = 0, wB = 0, wF = 0, varMax = 0, threshold = 120;
+      for (let t = 0; t < 256; t++) {
+        wB += hist[t];
+        if (wB === 0) continue;
+        wF = total - wB;
+        if (wF === 0) break;
+        sumB += t * hist[t];
+        let mB = sumB / wB;
+        let mF = (sum - sumB) / wF;
+        let varBetween = wB * wF * (mB - mF) * (mB - mF);
+        if (varBetween > varMax) {
+          varMax = varBetween;
+          threshold = t;
+        }
+      }
+      threshold = Math.max(100, threshold);
+
+      const mask = new Uint8Array(sw * sh);
+      let count = 0;
+      for (let y = 1; y < sh - 1; y++) {
+        for (let x = 1; x < sw - 1; x++) {
+          const idx = y * sw + x;
+          if (gray[idx] >= threshold) {
+            mask[idx] = 1;
+            count++;
+          }
+        }
+      }
+
+      if (count < (sw * sh) * 0.1) {
+        pageObj.corners = [
+          { x: W * 0.06, y: H * 0.06 },
+          { x: W * 0.94, y: H * 0.06 },
+          { x: W * 0.94, y: H * 0.94 },
+          { x: W * 0.06, y: H * 0.94 }
+        ];
+        return;
+      }
+
+      const topPts = [], botPts = [], leftPts = [], rightPts = [];
+      for (let x = 8; x < sw - 8; x += 2) {
+        for (let y = 4; y < sh - 4; y++) {
+          if (mask[y * sw + x] === 1) { topPts.push({ x, y }); break; }
+        }
+        for (let y = sh - 5; y >= 4; y--) {
+          if (mask[y * sw + x] === 1) { botPts.push({ x, y }); break; }
+        }
+      }
+      for (let y = 8; y < sh - 8; y += 2) {
+        for (let x = 4; x < sw - 4; x++) {
+          if (mask[y * sw + x] === 1) { leftPts.push({ x, y }); break; }
+        }
+        for (let x = sw - 5; x >= 4; x--) {
+          if (mask[y * sw + x] === 1) { rightPts.push({ x, y }); break; }
+        }
+      }
+
+      const lineTop = fitLineY(topPts);
+      const lineBot = fitLineY(botPts);
+      const lineLeft = fitLineX(leftPts);
+      const lineRight = fitLineX(rightPts);
+
+      const ptTL = intersect(lineTop, lineLeft);
+      const ptTR = intersect(lineTop, lineRight);
+      const ptBR = intersect(lineBot, lineRight);
+      const ptBL = intersect(lineBot, lineLeft);
+
+      pageObj.corners = [
+        { x: Math.max(0, Math.min(W, ptTL.x * scaleX)), y: Math.max(0, Math.min(H, ptTL.y * scaleY)) },
+        { x: Math.max(0, Math.min(W, ptTR.x * scaleX)), y: Math.max(0, Math.min(H, ptTR.y * scaleY)) },
+        { x: Math.max(0, Math.min(W, ptBR.x * scaleX)), y: Math.max(0, Math.min(H, ptBR.y * scaleY)) },
+        { x: Math.max(0, Math.min(W, ptBL.x * scaleX)), y: Math.max(0, Math.min(H, ptBL.y * scaleY)) }
+      ];
     }
 
-    function updateUIHeader() {
-      pdfBtnText.innerText = `PDF (${pages.length})`;
-      warpAllBtnText.innerText = `Luruskan Semua (${pages.length})`;
-      pageBadge.innerText = `Hal ${currentPageIndex + 1}/${pages.length}`;
+    function fitLineY(pts) {
+      if (pts.length < 2) return { m: 0, c: 0 };
+      let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0, n = pts.length;
+      for (let p of pts) { sumX += p.x; sumY += p.y; sumXY += p.x * p.y; sumX2 += p.x * p.x; }
+      const m = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX || 1);
+      const c = (sumY - m * sumX) / n;
+      return { m, c };
     }
 
-    // 2. PAGE NAVIGATION
+    function fitLineX(pts) {
+      if (pts.length < 2) return { m: 0, c: 0 };
+      let sumX = 0, sumY = 0, sumXY = 0, sumY2 = 0, n = pts.length;
+      for (let p of pts) { sumX += p.x; sumY += p.y; sumXY += p.x * p.y; sumY2 += p.y * p.y; }
+      const m = (n * sumXY - sumX * sumY) / (n * sumY2 - sumY * sumY || 1);
+      const c = (sumX - m * sumY) / n;
+      return { m, c };
+    }
+
+    function intersect(lineH, lineV) {
+      const y = (lineH.m * lineV.c + lineH.c) / (1 - lineH.m * lineV.m || 1);
+      const x = lineV.m * y + lineV.c;
+      return { x, y };
+    }
+
+    // 3. PAGE SELECTION
     function selectPage(idx) {
       if (idx < 0 || idx >= pages.length) return;
       currentPageIndex = idx;
       const curPage = pages[currentPageIndex];
 
-      updateUIHeader();
       activeCornerLabel.innerText = cornerNames[curPage.selectedCornerIndex];
+      updatePageBadge();
 
-      if (curPage.isWarped && curPage.finalImageData) {
-        showResultStage(curPage);
+      if (curPage.isWarped) {
+        cropStage.classList.add('hidden');
+        previewStage.classList.remove('hidden');
+        cropControls.classList.add('hidden');
+        filterControls.classList.remove('hidden');
+        renderFinalPageResult(curPage);
       } else {
-        showCropStage(curPage);
+        cropStage.classList.remove('hidden');
+        previewStage.classList.add('hidden');
+        cropControls.classList.remove('hidden');
+        filterControls.classList.add('hidden');
+
+        cropCanvas.width = curPage.rawImage.width;
+        cropCanvas.height = curPage.rawImage.height;
+        renderCropOverlay();
+        attachCanvasEvents();
       }
 
       renderThumbnails();
     }
 
-    function showCropStage(curPage) {
-      cropStage.classList.remove('hidden');
-      previewStage.classList.add('hidden');
-      cropDock.classList.remove('hidden');
-      filterDock.classList.add('hidden');
-
-      cropCanvas.width = curPage.rawImage.width;
-      cropCanvas.height = curPage.rawImage.height;
-
-      renderCropOverlay();
-      attachCanvasEvents();
-    }
-
-    function showResultStage(curPage) {
-      cropStage.classList.add('hidden');
-      previewStage.classList.remove('hidden');
-      cropDock.classList.add('hidden');
-      filterDock.classList.remove('hidden');
-
-      document.querySelectorAll('.filter-btn').forEach(b => {
-        if (b.dataset.filter === curPage.filter) {
-          b.classList.add('border-brand-500');
-          b.classList.remove('border-slate-700');
-        } else {
-          b.classList.remove('border-brand-500');
-          b.classList.add('border-slate-700');
-        }
-      });
-
-      resultCanvas.width = curPage.warpedCanvas.width;
-      resultCanvas.height = curPage.warpedCanvas.height;
-      if (curPage.finalImageData) {
-        resultCtx.putImageData(curPage.finalImageData, 0, 0);
-      }
-    }
-
     function renderThumbnails() {
-      thumbBar.innerHTML = '';
+      thumbList.innerHTML = '';
       pages.forEach((p, i) => {
         const isActive = (i === currentPageIndex);
         const card = document.createElement('div');
-        card.className = `cursor-pointer p-1 rounded-xl border transition flex flex-col items-center gap-1 shrink-0 ${
-          isActive ? 'border-brand-500 bg-brand-500/10' : 'border-slate-800 bg-slate-900/60'
+        card.className = `cursor-pointer p-1 rounded-lg border transition flex items-center gap-1.5 shrink-0 ${
+          isActive ? 'border-brand-500 bg-brand-500/10' : 'border-slate-800 bg-slate-950'
         }`;
         card.onclick = () => selectPage(i);
 
         const thumbCanvas = document.createElement('canvas');
-        thumbCanvas.width = 60;
-        thumbCanvas.height = 75;
-        thumbCanvas.className = "w-12 h-14 object-contain rounded bg-slate-950";
+        thumbCanvas.width = 40;
+        thumbCanvas.height = 48;
+        thumbCanvas.className = "w-7 h-9 object-contain rounded bg-slate-900";
         const tCtx = thumbCanvas.getContext('2d');
         
         if (p.isWarped && p.warpedCanvas.width) {
@@ -675,12 +517,12 @@
         }
 
         const label = document.createElement('span');
-        label.className = `text-[9px] font-bold ${isActive ? 'text-brand-400' : 'text-slate-500'}`;
+        label.className = `text-[10px] pr-1.5 ${isActive ? 'text-brand-400 font-bold' : 'text-slate-400'}`;
         label.innerText = `Hal ${i + 1}`;
 
         card.appendChild(thumbCanvas);
         card.appendChild(label);
-        thumbBar.appendChild(card);
+        thumbList.appendChild(card);
       });
       lucide.createIcons();
     }
@@ -690,7 +532,7 @@
       pages.splice(currentPageIndex, 1);
       if (pages.length === 0) {
         dropZone.classList.remove('hidden');
-        thumbBar.classList.add('hidden');
+        thumbSection.classList.add('hidden');
         bottomControls.classList.add('hidden');
         cropStage.classList.add('hidden');
         previewStage.classList.add('hidden');
@@ -699,22 +541,20 @@
         currentPageIndex = Math.max(0, currentPageIndex - 1);
         selectPage(currentPageIndex);
       }
-      updateUIHeader();
+      updatePageBadge();
     }
 
-    // 3. CROP OVERLAY & TOUCH
+    // 4. OVERLAY & TOUCH HANDLER
     function renderCropOverlay() {
       const curPage = pages[currentPageIndex];
-      if (!curPage || !curPage.corners.length) return;
+      if (!curPage) return;
 
       cropCtx.clearRect(0, 0, cropCanvas.width, cropCanvas.height);
       cropCtx.drawImage(curPage.rawImage, 0, 0);
 
-      // Dark Outside Mask
       cropCtx.fillStyle = "rgba(15, 23, 42, 0.6)";
       cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
 
-      // Clear Polygon Area
       cropCtx.save();
       cropCtx.beginPath();
       cropCtx.moveTo(curPage.corners[0].x, curPage.corners[0].y);
@@ -724,7 +564,6 @@
       cropCtx.drawImage(curPage.rawImage, 0, 0);
       cropCtx.restore();
 
-      // Green Border
       cropCtx.strokeStyle = "#10b981";
       cropCtx.lineWidth = Math.max(3, cropCanvas.width * 0.004);
       cropCtx.beginPath();
@@ -733,8 +572,7 @@
       cropCtx.closePath();
       cropCtx.stroke();
 
-      // Corner Circles
-      const radius = Math.max(14, cropCanvas.width * 0.022);
+      const radius = Math.max(14, cropCanvas.width * 0.02);
       curPage.corners.forEach((p, idx) => {
         const isSelected = (idx === curPage.selectedCornerIndex);
         cropCtx.beginPath();
@@ -752,6 +590,42 @@
       });
     }
 
+    btnToggleDpad.addEventListener('click', () => {
+      dpadPanel.classList.toggle('hidden');
+    });
+
+    function toggleCornerSelection() {
+      const curPage = pages[currentPageIndex];
+      curPage.selectedCornerIndex = (curPage.selectedCornerIndex + 1) % 4;
+      activeCornerLabel.innerText = cornerNames[curPage.selectedCornerIndex];
+      renderCropOverlay();
+    }
+
+    window.nudgeActiveCorner = function(dx, dy) {
+      const curPage = pages[currentPageIndex];
+      if (!curPage) return;
+      const idx = curPage.selectedCornerIndex;
+      curPage.corners[idx].x = Math.max(0, Math.min(cropCanvas.width, curPage.corners[idx].x + dx));
+      curPage.corners[idx].y = Math.max(0, Math.min(cropCanvas.height, curPage.corners[idx].y + dy));
+      renderCropOverlay();
+    };
+
+    btnAutoDetect.addEventListener('click', () => {
+      detectDocumentCornersUltra(pages[currentPageIndex]);
+      renderCropOverlay();
+    });
+
+    btnFullArea.addEventListener('click', () => {
+      const curPage = pages[currentPageIndex];
+      curPage.corners = [
+        { x: 0, y: 0 },
+        { x: cropCanvas.width, y: 0 },
+        { x: cropCanvas.width, y: cropCanvas.height },
+        { x: 0, y: cropCanvas.height }
+      ];
+      renderCropOverlay();
+    });
+
     function attachCanvasEvents() {
       const getCoords = (e) => {
         const rect = cropCanvas.getBoundingClientRect();
@@ -765,13 +639,12 @@
       const start = (e) => {
         const pos = getCoords(e);
         const curPage = pages[currentPageIndex];
-        const hitDist = Math.max(50, cropCanvas.width * 0.07);
+        const hitDist = Math.max(45, cropCanvas.width * 0.06);
         activePointIndex = curPage.corners.findIndex(p => Math.hypot(p.x - pos.x, p.y - pos.y) < hitDist);
         if (activePointIndex !== -1) {
           curPage.selectedCornerIndex = activePointIndex;
           activeCornerLabel.innerText = cornerNames[activePointIndex];
           updateLoupe(pos);
-          renderCropOverlay();
         }
       };
 
@@ -794,8 +667,8 @@
       function updateLoupe(pos) {
         const curPage = pages[currentPageIndex];
         magnifier.style.display = 'block';
-        magnifier.style.left = `${pos.clientX - 55}px`;
-        magnifier.style.top = `${pos.clientY - 130}px`;
+        magnifier.style.left = `${Math.min(window.innerWidth - 130, Math.max(10, pos.clientX - 60))}px`;
+        magnifier.style.top = `${Math.max(10, pos.clientY - 140)}px`;
 
         const zoom = 2.5;
         magnifier.style.backgroundImage = `url(${curPage.rawImage.src})`;
@@ -804,7 +677,7 @@
         const activeCorner = curPage.corners[curPage.selectedCornerIndex];
         const screenX = (activeCorner.x / cropCanvas.width) * cropCanvas.clientWidth;
         const screenY = (activeCorner.y / cropCanvas.height) * cropCanvas.clientHeight;
-        magnifier.style.backgroundPosition = `-${screenX * zoom - 55}px -${screenY * zoom - 55}px`;
+        magnifier.style.backgroundPosition = `-${screenX * zoom - 60}px -${screenY * zoom - 60}px`;
       }
 
       cropCanvas.onmousedown = start;
@@ -816,67 +689,18 @@
       window.ontouchend = end;
     }
 
-    function toggleDpadModal() {
-      dpadModal.classList.toggle('translate-y-full');
-    }
-
-    function cycleCornerSelection() {
-      const curPage = pages[currentPageIndex];
-      curPage.selectedCornerIndex = (curPage.selectedCornerIndex + 1) % 4;
-      activeCornerLabel.innerText = cornerNames[curPage.selectedCornerIndex];
-      renderCropOverlay();
-    }
-
-    window.nudgeActiveCorner = function(dx, dy) {
-      const curPage = pages[currentPageIndex];
-      if (!curPage) return;
-      const idx = curPage.selectedCornerIndex;
-      curPage.corners[idx].x = Math.max(0, Math.min(cropCanvas.width, curPage.corners[idx].x + dx));
-      curPage.corners[idx].y = Math.max(0, Math.min(cropCanvas.height, curPage.corners[idx].y + dy));
-      renderCropOverlay();
-    };
-
-    btnAutoDetect.addEventListener('click', async () => {
-      showLoading("Snap Garis AI...");
-      const corners = await detectCornersAsync(pages[currentPageIndex]);
-      pages[currentPageIndex].corners = corners;
-      hideLoading();
-      renderCropOverlay();
-    });
-
-    btnFullArea.addEventListener('click', () => {
-      const curPage = pages[currentPageIndex];
-      curPage.corners = [
-        { x: 0, y: 0 },
-        { x: cropCanvas.width, y: 0 },
-        { x: cropCanvas.width, y: cropCanvas.height },
-        { x: 0, y: cropCanvas.height }
-      ];
-      renderCropOverlay();
-    });
-
-    // 4. WARP PIPELINE (SINGLE & BATCH WARP ALL)
-    btnApplyWarp.addEventListener('click', async () => {
-      showLoading("Meluruskan halaman...");
-      await warpAndFilterPageAsync(pages[currentPageIndex]);
-      hideLoading();
+    // 5. WARPING & FILTERS
+    btnApplyWarp.addEventListener('click', () => {
+      warpPage(pages[currentPageIndex]);
       selectPage(currentPageIndex);
     });
 
-    // FITUR UTAMA: LURUSKAN SEMUA HALAMAN
-    window.warpAllPages = async function() {
-      if (!pages.length) return;
-      
-      for (let i = 0; i < pages.length; i++) {
-        showLoading(`Meluruskan halaman ${i + 1} dari ${pages.length}...`);
-        await warpAndFilterPageAsync(pages[i]);
-      }
-      
-      hideLoading();
+    btnBackToCrop.addEventListener('click', () => {
+      pages[currentPageIndex].isWarped = false;
       selectPage(currentPageIndex);
-    };
+    });
 
-    async function warpAndFilterPageAsync(pageObj) {
+    function warpPage(pageObj) {
       const pts = pageObj.corners;
       const widthTop = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
       const widthBottom = Math.hypot(pts[2].x - pts[3].x, pts[2].y - pts[3].y);
@@ -886,6 +710,10 @@
       const dstW = Math.round(Math.max(widthTop, widthBottom));
       const dstH = Math.round(Math.max(heightLeft, heightRight));
 
+      pageObj.warpedCanvas.width = dstW;
+      pageObj.warpedCanvas.height = dstH;
+      const ctx = pageObj.warpedCanvas.getContext('2d');
+
       const sCanvas = document.createElement('canvas');
       sCanvas.width = pageObj.rawImage.width;
       sCanvas.height = pageObj.rawImage.height;
@@ -893,92 +721,88 @@
       sCtx.drawImage(pageObj.rawImage, 0, 0);
 
       const srcData = sCtx.getImageData(0, 0, sCanvas.width, sCanvas.height).data;
+      const outImgData = ctx.createImageData(dstW, dstH);
+      const dstData = outImgData.data;
 
-      // 1. Perspective Warp
-      const warpRes = await postWorkerTask('WARP_PERSPECTIVE', pageObj.id, {
-        srcData, srcW: sCanvas.width, srcH: sCanvas.height, pts, dstW, dstH
-      });
+      const p0 = pts[0], p1 = pts[1], p2 = pts[2], p3 = pts[3];
+      const srcW = sCanvas.width, srcH = sCanvas.height;
 
-      pageObj.warpedCanvas.width = warpRes.dstW;
-      pageObj.warpedCanvas.height = warpRes.dstH;
-      const wCtx = pageObj.warpedCanvas.getContext('2d');
-      const imgData = wCtx.createImageData(warpRes.dstW, warpRes.dstH);
-      imgData.data.set(new Uint8ClampedArray(warpRes.dstData));
-      wCtx.putImageData(imgData, 0, 0);
-      pageObj.isWarped = true;
+      for (let y = 0; y < dstH; y++) {
+        const v = y / dstH;
+        for (let x = 0; x < dstW; x++) {
+          const u = x / dstW;
+          const sx = (1 - u) * (1 - v) * p0.x + u * (1 - v) * p1.x + u * v * p2.x + (1 - u) * v * p3.x;
+          const sy = (1 - u) * (1 - v) * p0.y + u * (1 - v) * p1.y + u * v * p2.y + (1 - u) * v * p3.y;
 
-      // 2. Apply Current Filter
-      const filterRes = await postWorkerTask('FILTER', pageObj.id, {
-        imgDataBuffer: imgData.data.buffer,
-        length: imgData.data.length,
-        filterType: pageObj.filter
-      }, [imgData.data.buffer]);
+          const isx = Math.floor(sx);
+          const isy = Math.floor(sy);
 
-      pageObj.finalImageData = new ImageData(
-        new Uint8ClampedArray(filterRes.filteredBuffer),
-        pageObj.warpedCanvas.width,
-        pageObj.warpedCanvas.height
-      );
-    }
-
-    btnBackToCrop.addEventListener('click', () => {
-      pages[currentPageIndex].isWarped = false;
-      selectPage(currentPageIndex);
-    });
-
-    window.applyFilterToCurrent = async function(type) {
-      const curPage = pages[currentPageIndex];
-      curPage.filter = type;
-      showLoading("Menerapkan filter...");
-
-      const wCtx = curPage.warpedCanvas.getContext('2d');
-      const imgData = wCtx.getImageData(0, 0, curPage.warpedCanvas.width, curPage.warpedCanvas.height);
-
-      const filterRes = await postWorkerTask('FILTER', curPage.id, {
-        imgDataBuffer: imgData.data.buffer,
-        length: imgData.data.length,
-        filterType: curPage.filter
-      }, [imgData.data.buffer]);
-
-      curPage.finalImageData = new ImageData(
-        new Uint8ClampedArray(filterRes.filteredBuffer),
-        curPage.warpedCanvas.width,
-        curPage.warpedCanvas.height
-      );
-
-      hideLoading();
-      showResultStage(curPage);
-      renderThumbnails();
-    };
-
-    window.applyFilterToAll = async function() {
-      const type = pages[currentPageIndex].filter;
-      showLoading("Memproses semua halaman...");
-      
-      for (let i = 0; i < pages.length; i++) {
-        const p = pages[i];
-        p.filter = type;
-        if (p.isWarped) {
-          const wCtx = p.warpedCanvas.getContext('2d');
-          const imgData = wCtx.getImageData(0, 0, p.warpedCanvas.width, p.warpedCanvas.height);
-
-          const filterRes = await postWorkerTask('FILTER', p.id, {
-            imgDataBuffer: imgData.data.buffer,
-            length: imgData.data.length,
-            filterType: type
-          }, [imgData.data.buffer]);
-
-          p.finalImageData = new ImageData(
-            new Uint8ClampedArray(filterRes.filteredBuffer),
-            p.warpedCanvas.width,
-            p.warpedCanvas.height
-          );
+          if (isx >= 0 && isx < srcW && isy >= 0 && isy < srcH) {
+            const srcIdx = (isy * srcW + isx) * 4;
+            const dstIdx = (y * dstW + x) * 4;
+            dstData[dstIdx]     = srcData[srcIdx];
+            dstData[dstIdx + 1] = srcData[srcIdx + 1];
+            dstData[dstIdx + 2] = srcData[srcIdx + 2];
+            dstData[dstIdx + 3] = 255;
+          }
         }
       }
+      ctx.putImageData(outImgData, 0, 0);
+      pageObj.isWarped = true;
+    }
 
-      hideLoading();
-      showResultStage(pages[currentPageIndex]);
-      renderThumbnails();
+    function renderFinalPageResult(pageObj) {
+      document.querySelectorAll('.filter-btn').forEach(b => {
+        if (b.dataset.filter === pageObj.filter) {
+          b.classList.add('border-brand-500');
+          b.classList.remove('border-slate-700');
+        } else {
+          b.classList.remove('border-brand-500');
+          b.classList.add('border-slate-700');
+        }
+      });
+
+      resultCanvas.width = pageObj.warpedCanvas.width;
+      resultCanvas.height = pageObj.warpedCanvas.height;
+      resultCtx.drawImage(pageObj.warpedCanvas, 0, 0);
+
+      const imgData = resultCtx.getImageData(0, 0, resultCanvas.width, resultCanvas.height);
+      const data = imgData.data;
+      const len = data.length;
+
+      if (pageObj.filter === 'magic') {
+        for (let i = 0; i < len; i += 4) {
+          let r = data[i], g = data[i + 1], b = data[i + 2];
+          r = ((r - 128) * 1.45) + 155;
+          g = ((g - 128) * 1.45) + 155;
+          b = ((b - 128) * 1.45) + 155;
+          data[i]     = Math.min(255, Math.max(0, r));
+          data[i + 1] = Math.min(255, Math.max(0, g));
+          data[i + 2] = Math.min(255, Math.max(0, b));
+        }
+      } else if (pageObj.filter === 'bw') {
+        for (let i = 0; i < len; i += 4) {
+          const avg = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+          data[i] = data[i + 1] = data[i + 2] = avg > 130 ? 255 : (avg < 75 ? 0 : (avg - 75) * 4.6);
+        }
+      } else if (pageObj.filter === 'gray') {
+        for (let i = 0; i < len; i += 4) {
+          const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+          data[i] = data[i + 1] = data[i + 2] = gray;
+        }
+      }
+      resultCtx.putImageData(imgData, 0, 0);
+    }
+
+    window.applyFilterToCurrent = function(type) {
+      pages[currentPageIndex].filter = type;
+      renderFinalPageResult(pages[currentPageIndex]);
+    };
+
+    window.applyFilterToAll = function() {
+      const type = pages[currentPageIndex].filter;
+      pages.forEach(p => { p.filter = type; });
+      renderFinalPageResult(pages[currentPageIndex]);
     };
 
     window.rotateCurrent = function(deg) {
@@ -998,49 +822,61 @@
       ctx.drawImage(temp, -temp.width / 2, -temp.height / 2);
       ctx.restore();
 
-      applyFilterToCurrent(curPage.filter);
+      renderFinalPageResult(curPage);
+      renderThumbnails();
     };
 
-    // 5. EXPORT PDF
+    // 6. PDF EXPORT
     btnExportPDF.addEventListener('click', () => {
       if (!pages.length) return;
-      showLoading("Menyusun Berkas PDF...");
+      const { jsPDF } = window.jspdf;
+      let pdf = null;
 
-      setTimeout(() => {
-        const { jsPDF } = window.jspdf;
-        let pdf = null;
+      pages.forEach((page, index) => {
+        if (!page.isWarped) warpPage(page);
 
-        pages.forEach((page, index) => {
-          const canvas = document.createElement('canvas');
-          canvas.width = page.warpedCanvas.width || page.rawImage.width;
-          canvas.height = page.warpedCanvas.height || page.rawImage.height;
-          const ctx = canvas.getContext('2d');
+        const bufferCanvas = document.createElement('canvas');
+        bufferCanvas.width = page.warpedCanvas.width;
+        bufferCanvas.height = page.warpedCanvas.height;
+        const bCtx = bufferCanvas.getContext('2d');
+        bCtx.drawImage(page.warpedCanvas, 0, 0);
 
-          if (page.finalImageData) {
-            ctx.putImageData(page.finalImageData, 0, 0);
-          } else {
-            ctx.drawImage(page.rawImage, 0, 0);
+        const imgData = bCtx.getImageData(0, 0, bufferCanvas.width, bufferCanvas.height);
+        const data = imgData.data;
+        const len = data.length;
+
+        if (page.filter === 'magic') {
+          for (let i = 0; i < len; i += 4) {
+            data[i]     = Math.min(255, Math.max(0, ((data[i] - 128) * 1.45) + 155));
+            data[i + 1] = Math.min(255, Math.max(0, ((data[i + 1] - 128) * 1.45) + 155));
+            data[i + 2] = Math.min(255, Math.max(0, ((data[i + 2] - 128) * 1.45) + 155));
           }
-
-          const isLandscape = canvas.width > canvas.height;
-          const orientation = isLandscape ? 'l' : 'p';
-
-          if (index === 0) {
-            pdf = new jsPDF({
-              orientation: orientation,
-              unit: 'px',
-              format: [canvas.width, canvas.height]
-            });
-          } else {
-            pdf.addPage([canvas.width, canvas.height], orientation);
+        } else if (page.filter === 'bw') {
+          for (let i = 0; i < len; i += 4) {
+            const avg = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+            data[i] = data[i + 1] = data[i + 2] = avg > 130 ? 255 : (avg < 75 ? 0 : (avg - 75) * 4.6);
           }
+        } else if (page.filter === 'gray') {
+          for (let i = 0; i < len; i += 4) {
+            const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+            data[i] = data[i + 1] = data[i + 2] = gray;
+          }
+        }
+        bCtx.putImageData(imgData, 0, 0);
 
-          pdf.addImage(canvas.toDataURL('image/jpeg', 0.90), 'JPEG', 0, 0, canvas.width, canvas.height);
-        });
+        const isLandscape = bufferCanvas.width > bufferCanvas.height;
+        const orientation = isLandscape ? 'l' : 'p';
 
-        pdf.save(`DocuScan_${pages.length}_Hal_${Date.now()}.pdf`);
-        hideLoading();
-      }, 100);
+        if (index === 0) {
+          pdf = new jsPDF({ orientation, unit: 'px', format: [bufferCanvas.width, bufferCanvas.height] });
+        } else {
+          pdf.addPage([bufferCanvas.width, bufferCanvas.height], orientation);
+        }
+
+        pdf.addImage(bufferCanvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, bufferCanvas.width, bufferCanvas.height);
+      });
+
+      pdf.save(`DocuScan_${pages.length}_Hal_${Date.now()}.pdf`);
     });
   </script>
 </body>
